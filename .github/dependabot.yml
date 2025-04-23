@@ -16,6 +16,10 @@ updates:
       jackson:
         patterns:
           - "com.fasterxml.jackson*"
+    ignore:
+      # Ignore major version updates for protoc as they break gRPC compatibility
+      - dependency-name: "com.google.protobuf:protoc"
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 10
     
   # Go modules
