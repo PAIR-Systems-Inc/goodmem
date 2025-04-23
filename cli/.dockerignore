@@ -13,3 +13,4 @@ goodmem
 
 # Go specific
 /vendor/
+*.test

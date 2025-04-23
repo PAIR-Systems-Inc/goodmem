@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  vector-db:
+    image: chromadb/chroma:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    restart: unless-stopped
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    ports:
+      - "8080:8080"  # REST API
+      - "9090:9090"  # gRPC
+    depends_on:
+      - vector-db
+    environment:
+      - VECTOR_DB_URL=http://vector-db:8000
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    environment:
+      - GOODMEM_SERVER_URL=http://server:8080
+    restart: unless-stopped
+    depends_on:
+      - server
+
+volumes:
+  chroma-data:

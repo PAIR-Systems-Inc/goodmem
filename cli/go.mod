@@ -3,7 +3,9 @@ module github.com/pairsys/goodmem/cli
 go 1.22
 
 require (
-	github.com/spf13/cobra v1.7.0
+	github.com/bufbuild/connect-go v1.12.0
+	github.com/spf13/cobra v2.4.0
+	google.golang.org/protobuf v1.34.1
 )
 
 require (

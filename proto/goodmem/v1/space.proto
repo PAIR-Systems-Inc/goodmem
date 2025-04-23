@@ -1,0 +1,47 @@
+syntax = "proto3";
+package goodmem.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// A Space is the fundamental storage unit in GoodMem.
+// Reserved label keys:
+//   user – identifies the end-user
+//   bot  – identifies the agent/bot
+//   org  – identifies the organisation or tenant
+message Space {
+  string space_id         = 1;  // UUID
+  string name             = 2;  // human-friendly name, unique per owner
+  map<string, string> labels = 3; // arbitrary k-v pairs, includes reserved keys
+  string embedding_model  = 4;  // e.g. "openai-ada-002"
+  google.protobuf.Timestamp created_at = 5;
+  string owner_id         = 6;  // principal that created the space
+  bool public_read        = 7;  // if true, anyone may query
+}
+
+message CreateSpaceRequest {
+  string name             = 1;
+  map<string, string> labels = 2;
+  string embedding_model  = 3;
+  bool public_read        = 4;
+}
+
+message DeleteSpaceRequest {
+  string space_id = 1;
+}
+
+message ListSpacesRequest {
+  // label_selectors is a partial match: all listed pairs must be present
+  // in a Space's labels map for it to be returned.
+  map<string, string> label_selectors = 1;
+}
+
+message ListSpacesResponse {
+  repeated Space spaces = 1;
+}
+
+service SpaceService {
+  rpc CreateSpace(CreateSpaceRequest) returns (Space);
+  rpc DeleteSpace(DeleteSpaceRequest) returns (google.protobuf.Empty);
+  rpc ListSpaces(ListSpacesRequest)   returns (ListSpacesResponse);
+}

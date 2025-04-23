@@ -1,0 +1,63 @@
+plugins {
+    id("java")
+    id("application")
+    id("com.google.protobuf")
+    id("com.github.johnrengelman.shadow") version "8.1.1"
+}
+
+group = "com.goodmem"
+version = "0.1.0"
+
+dependencies {
+    // Javalin
+    implementation("io.javalin:javalin:6.1.4")
+    
+    // gRPC
+    implementation("io.grpc:grpc-netty-shaded:1.63.0")
+    implementation("io.grpc:grpc-protobuf:1.63.0")
+    implementation("io.grpc:grpc-stub:1.63.0")
+    
+    // JSON
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
+    
+    // Annotation for generated code
+    implementation("jakarta.annotation:jakarta.annotation-api:2.1.1")
+}
+
+application {
+    mainClass.set("com.goodmem.Main")
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:3.25.3"
+    }
+    plugins {
+        create("grpc") {
+            artifact = "io.grpc:protoc-gen-grpc-java:1.63.0"
+        }
+    }
+    generateProtoTasks {
+        all().forEach {
+            it.plugins {
+                create("grpc")
+            }
+        }
+    }
+}
+
+tasks.named<Jar>("jar") {
+    manifest {
+        attributes(
+            mapOf(
+                "Main-Class" to application.mainClass.get()
+            )
+        )
+    }
+}
+
+tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+    archiveBaseName.set("goodmem-server")
+    archiveClassifier.set("")
+    archiveVersion.set("")
+}

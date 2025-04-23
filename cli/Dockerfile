@@ -13,7 +13,7 @@ COPY . .
 
 # Build the application with commit information
 ARG GIT_COMMIT=dev
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-X main.gitCommit=${GIT_COMMIT}" -o goodmem .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-s -w -X main.gitCommit=${GIT_COMMIT}" -o goodmem .
 
 # Run tests
 RUN go vet ./...
@@ -24,6 +24,9 @@ FROM scratch
 
 # Copy the binary from the builder stage
 COPY --from=builder /app/goodmem /goodmem
+
+# Copy CA certificates for HTTPS connections
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Metadata
 LABEL org.opencontainers.image.source=https://github.com/pairsys/goodmem
