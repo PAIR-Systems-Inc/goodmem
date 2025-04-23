@@ -19,7 +19,7 @@ dependencies {
     implementation("io.grpc:grpc-inprocess:1.72.0")
     
     // JSON
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.3")
     
     // Annotation for generated code
     implementation("jakarta.annotation:jakarta.annotation-api:3.0.0")

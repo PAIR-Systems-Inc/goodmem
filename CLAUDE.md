@@ -23,7 +23,7 @@
   - gRPC 1.72.0 (RPC framework)
   - Protocol Buffers 3.25.5
   - Gradle 8.13 with Shadow plugin 8.1.1 (for building uber JARs)
-  - Jackson 2.17.0 (JSON serialization)
+  - Jackson 2.18.3 (JSON serialization)
   - SLF4J 2.0.17 (Logging)
   - Jakarta Annotation API 3.0.0
 - **CLI**: Go with connect-go
