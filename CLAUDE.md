@@ -71,6 +71,17 @@ The project includes several developer tools to streamline development workflows
   - Shows available updates for libraries and Gradle
   - Usage: `./server/check_outdated.sh`
 
+- **`server/format_java.sh`**: Java code formatter
+  - Uses Google Java Format to standardize code style
+  - Downloads the formatter automatically if needed
+  - Can check code formatting or fix issues in-place
+  - Usage:
+    - Format a specific file: `./server/format_java.sh path/to/File.java`
+    - Fix formatting in-place: `./server/format_java.sh --fix path/to/File.java`
+    - Check formatting only: `./server/format_java.sh --check path/to/File.java`
+    - Format entire directory: `./server/format_java.sh path/to/directory`
+    - Default (no args): formats all Java files in server/src
+
 ### CLI Tools
 
 - **`cli/build.sh`**: Reproducible CLI build script
@@ -78,10 +89,18 @@ The project includes several developer tools to streamline development workflows
   - Extracts the binary to the dist directory
   - Usage: `./cli/build.sh`
 
+### Git Hooks
+
+- **`scripts/pre-commit-hooks/check_java_format.sh`**: Pre-commit hook for Java formatting
+  - Checks if staged Java files are formatted according to Google Java Format
+  - Prevents commits that would introduce formatting violations
+  - Install with: `ln -sf ../../scripts/pre-commit-hooks/check_java_format.sh .git/hooks/pre-commit`
+  - See `scripts/pre-commit-hooks/README.md` for more details
+
 ### Adding New Tools
 When creating new scripts:
 - Place them in the relevant component directory
-- Use snake_case for script names
+- Use snake_case for script names (e.g., `do_something.sh`, NOT `do-something.sh`)
 - Make scripts executable (`chmod +x`)
 - Add documentation to this file
 - Include usage instructions in a comment at the top of the script
@@ -96,10 +115,15 @@ goodmem/
 │   └── goodmem/
 │       └── v1/       # API version 1 definitions
 │           └── space.proto  # Space service definition
+├── scripts/          # Shared scripts and tools
+│   └── pre-commit-hooks/   # Git pre-commit hooks
+│       ├── check_java_format.sh  # Java formatting check hook
+│       └── README.md      # Instructions for using hooks
 ├── server/           # Java server implementation
 │   ├── build.gradle.kts     # Server-specific Gradle build file
 │   ├── build.sh             # Server build script using Docker
 │   ├── check_outdated.sh    # Dependency version checker
+│   ├── format_java.sh       # Google Java Format tool
 │   └── src/
 │       └── main/
 │           └── java/
