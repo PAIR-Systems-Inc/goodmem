@@ -51,7 +51,7 @@ jobs:
           go-version: '1.22.2'
         
       - name: Run Go linting
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v7
         with:
           version: latest
           working-directory: cli
