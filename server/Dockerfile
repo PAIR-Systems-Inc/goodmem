@@ -1,7 +1,20 @@
 # Build stage
-FROM eclipse-temurin:21-jdk-alpine AS build
+FROM eclipse-temurin:21-jdk-jammy AS build
 
 WORKDIR /app
+
+# Install necessary dependencies
+RUN apt-get update && apt-get install -y \
+    protobuf-compiler \
+    unzip \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install protoc-gen-grpc-java plugin
+RUN mkdir -p /usr/local/bin/protoc-plugins/
+RUN wget -q -O /usr/local/bin/protoc-plugins/protoc-gen-grpc-java https://repo1.maven.org/maven2/io/grpc/protoc-gen-grpc-java/1.72.0/protoc-gen-grpc-java-1.72.0-linux-x86_64.exe \
+    && chmod +x /usr/local/bin/protoc-plugins/protoc-gen-grpc-java \
+    && ln -s /usr/local/bin/protoc-plugins/protoc-gen-grpc-java /usr/local/bin/protoc-gen-grpc-java
 
 # Copy gradle configuration files
 COPY settings.gradle.kts build.gradle.kts ./
@@ -24,7 +37,7 @@ RUN chmod +x ./gradlew
 RUN ./gradlew :server:shadowJar --no-daemon
 
 # Runtime stage
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:21-jre-jammy
 
 WORKDIR /app
 
