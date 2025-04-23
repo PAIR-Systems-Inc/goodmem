@@ -35,7 +35,7 @@
 
 ## Development Environment
 - Java 21 JDK
-- Go 1.21+ with connect-go
+- Go 1.22+ with connect-go
 - Node.js 20+
 - Protocol Buffer compiler 3.25.x
 - Gradle 8.13+
@@ -47,6 +47,31 @@
 - Consistent error handling across components
 - Generated code should not be edited manually
 - Make proto field additions backward compatible
+
+### Protocol Buffer Best Practices
+- **Always include `go_package` option** in proto files to ensure correct Go import paths
+  - Format: `option go_package = "github.com/pairsys/goodmem/cli/gen/goodmem/v1";`
+- Run `./cli/gen_proto.sh` after any proto file changes
+- Never manually edit generated protobuf code
+- Follow semantic versioning for all API changes
+- Use compatible protobuf versions with gRPC ecosystem:
+  - Server: Protobuf 3.25.x
+  - CLI: google.golang.org/protobuf v1.36.x
+
+### Go Best Practices
+- Always check all error return values (required by golangci-lint)
+- Use specific Go version in go.mod (e.g., `go 1.22`)
+- Prefer standard library packages when possible
+- For CLI flags, properly check the return value of `MarkFlagRequired`:
+  ```go
+  if err := cmd.MarkFlagRequired("name"); err != nil {
+      panic(fmt.Sprintf("Failed to mark flag as required: %v", err))
+  }
+  ```
+- Manage compatible dependency versions:
+  - github.com/bufbuild/connect-go v1.10.0 (not higher)
+  - github.com/spf13/cobra v1.9.x (not v2.x)
+  - google.golang.org/protobuf v1.36.x
 
 ## Common Commands
 - **Build all**: `./gradlew build`
@@ -88,6 +113,12 @@ The project includes several developer tools to streamline development workflows
   - Uses Docker to create a consistent build environment
   - Extracts the binary to the dist directory
   - Usage: `./cli/build.sh`
+
+- **`cli/gen_proto.sh`**: Protocol Buffer code generator for CLI
+  - Uses Docker to create a consistent protobuf generation environment
+  - Generates Go code from protocol buffer definitions
+  - Updates import paths and package names automatically
+  - Usage: `./cli/gen_proto.sh`
 
 ### Git Hooks
 
