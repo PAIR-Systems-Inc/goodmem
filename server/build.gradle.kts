@@ -47,7 +47,7 @@ sourceSets {
 
 protobuf {
     protoc {
-        artifact = "com.google.protobuf:protoc:3.25.5"
+        artifact = "com.google.protobuf:protoc:4.30.2"
     }
     plugins {
         create("grpc") {
