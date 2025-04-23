@@ -16,6 +16,15 @@ Memory APIs with CLI and UI interfaces.
 java -jar server/build/libs/goodmem-server.jar
 ```
 
+The server starts two endpoints:
+- gRPC service on port 9090
+- REST API on port 8080 (mirrors the gRPC API)
+
+#### Server Requirements
+
+- Java JDK 21 or newer
+- Protocol Buffer compiler (required for development, not for running the JAR)
+
 #### Start with Docker Compose
 
 ```bash
