@@ -1,6 +1,8 @@
 syntax = "proto3";
 package goodmem.v1;
 
+option go_package = "github.com/pairsys/goodmem/cli/gen/goodmem/v1";
+
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 

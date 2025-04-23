@@ -9,9 +9,8 @@ import (
 
 	"github.com/bufbuild/connect-go"
 	"github.com/pairsys/goodmem/cli/gen/goodmem/v1"
-	"github.com/pairsys/goodmem/cli/gen/goodmem/v1/spacev1connect"
+	"github.com/pairsys/goodmem/cli/gen/goodmem/v1/v1connect"
 	"github.com/spf13/cobra"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -34,7 +33,7 @@ var createSpaceCmd = &cobra.Command{
 	Short: "Create a new space",
 	Long:  `Create a new space in the GoodMem service with the specified name and labels.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client := spacev1connect.NewSpaceServiceClient(
+		client := v1connect.NewSpaceServiceClient(
 			http.DefaultClient,
 			serverAddress,
 		)
@@ -79,7 +78,7 @@ var listSpacesCmd = &cobra.Command{
 	Short: "List spaces",
 	Long:  `List spaces in the GoodMem service, optionally filtered by labels.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client := spacev1connect.NewSpaceServiceClient(
+		client := v1connect.NewSpaceServiceClient(
 			http.DefaultClient,
 			serverAddress,
 		)
@@ -124,7 +123,7 @@ var deleteSpaceCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		spaceID := args[0]
-		client := spacev1connect.NewSpaceServiceClient(
+		client := v1connect.NewSpaceServiceClient(
 			http.DefaultClient,
 			serverAddress,
 		)

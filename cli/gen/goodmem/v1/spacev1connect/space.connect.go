@@ -9,7 +9,6 @@ import (
 	v1 "github.com/pairsys/goodmem/cli/gen/goodmem/v1"
 	connect_go "github.com/bufbuild/connect-go"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
-	http "net/http"
 	strings "strings"
 )
 
