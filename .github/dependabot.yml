@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # Java dependencies via Gradle
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "java"
+    groups:
+      grpc:
+        patterns:
+          - "io.grpc:*"
+      jackson:
+        patterns:
+          - "com.fasterxml.jackson*"
+    open-pull-requests-limit: 10
+    
+  # Go modules
+  - package-ecosystem: "gomod"
+    directory: "/cli"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "go"
+    open-pull-requests-limit: 10
+    
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+      - "github_actions"
+    open-pull-requests-limit: 5
