@@ -2,6 +2,17 @@
 
 Memory APIs with CLI and UI interfaces.
 
+## Components
+
+- **Server**: Java 21 service with gRPC and REST APIs
+- **CLI**: Go-based command-line client 
+- **Client Libraries**: 
+  - Python (3.8+)
+  - Java (8+)
+  - .NET (C#, NET 8.0)
+  - Go (1.22+)
+  - JavaScript (Node.js)
+
 ## Quick Start
 
 ### Server Quick Start
@@ -86,4 +97,61 @@ docker run --rm goodmem-cli version
 
 # delete
 ./goodmem space delete 00000000-0000-0000-0000-000000000001
+```
+
+### Client Libraries Quick Start
+
+GoodMem provides client libraries in multiple programming languages.
+
+#### Building the Clients
+
+All clients can be built using Docker, ensuring reproducible builds regardless of your local environment:
+
+```bash
+# Build all clients
+./clients/build_all.sh
+
+# Or build specific clients
+./clients/python/build.sh
+./clients/java/build.sh
+./clients/dotnet/build.sh
+./clients/go/build.sh
+./clients/js/build.sh
+```
+
+#### Usage Examples
+
+Python:
+```python
+from goodmem_client import Client
+
+client = Client("http://localhost:8080")
+```
+
+Java:
+```java
+import com.pairsystems.goodmem.client.Client;
+
+Client client = new Client("http://localhost:8080");
+```
+
+.NET (C#):
+```csharp
+using Pairsystems.Goodmem.Client;
+
+var client = new Client("http://localhost:8080");
+```
+
+Go:
+```go
+import "github.com/PAIR-Systems-Inc/goodmem/clients/go"
+
+client := goodmemclient.NewClient("http://localhost:8080")
+```
+
+JavaScript:
+```javascript
+import { Client } from '@pairsystems/goodmem-client-js';
+
+const client = new Client('http://localhost:8080');
 ```

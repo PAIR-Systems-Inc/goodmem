@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+goodmem_client/__init__.py
+goodmem_client/client.py
+goodmem_client.egg-info/PKG-INFO
+goodmem_client.egg-info/SOURCES.txt
+goodmem_client.egg-info/dependency_links.txt
+goodmem_client.egg-info/requires.txt
+goodmem_client.egg-info/top_level.txt
+tests/test_client.py

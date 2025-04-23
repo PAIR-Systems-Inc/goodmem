@@ -1,0 +1,6 @@
+// Initialization script for Gradle to use in Docker
+allprojects {
+    repositories {
+        mavenCentral()
+    }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@pairsystems/goodmem-client-js",
+  "version": "0.1.0",
+  "description": "JavaScript client for GoodMem services",
+  "type": "module",
+  "main": "src/client.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "keywords": [
+    "goodmem",
+    "client"
+  ],
+  "author": "PAIR Systems Inc.",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "chai": "^4.3.10",
+    "mocha": "^10.2.0"
+  }
+}

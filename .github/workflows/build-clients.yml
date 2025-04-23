@@ -1,0 +1,242 @@
+name: GoodMem Client Libraries Build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'clients/**'
+      - 'proto/**'
+      - '.github/workflows/build-clients.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'clients/**'
+      - 'proto/**'
+      - '.github/workflows/build-clients.yml'
+  workflow_dispatch:  # Allow manual triggering
+
+# Define permissions explicitly for security
+permissions:
+  contents: read     # For checkout, paths-filter
+  packages: write    # For pushing to GHCR or GitHub Packages
+  actions: write     # For GHA cache operations
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      build_python: ${{ steps.filter.outputs.python }}
+      build_java: ${{ steps.filter.outputs.java }}
+      build_dotnet: ${{ steps.filter.outputs.dotnet }}
+      build_go: ${{ steps.filter.outputs.go }}
+      build_js: ${{ steps.filter.outputs.js }}
+      build_proto: ${{ steps.filter.outputs.proto }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Path Filter
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            python:
+              - 'clients/python/**'
+              - '.github/workflows/build-clients.yml'
+            java:
+              - 'clients/java/**'
+              - '.github/workflows/build-clients.yml'
+            dotnet:
+              - 'clients/dotnet/**'
+              - '.github/workflows/build-clients.yml'
+            go:
+              - 'clients/go/**'
+              - '.github/workflows/build-clients.yml'
+            js:
+              - 'clients/js/**'
+              - '.github/workflows/build-clients.yml'
+            proto:
+              - 'proto/**'
+              - '.github/workflows/build-clients.yml'
+
+  build-python-client:
+    needs: setup
+    if: ${{ needs.setup.outputs.build_python == 'true' || needs.setup.outputs.build_proto == 'true' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Build Python client
+        run: |
+          cd clients/python
+          docker build -t goodmem-python-client-builder .
+          
+          # Extract the built wheel and source distribution
+          mkdir -p ../../dist/clients/python
+          CONTAINER_ID=$(docker create goodmem-python-client-builder)
+          docker cp $CONTAINER_ID:/app/dist/. ../../dist/clients/python/
+          docker rm $CONTAINER_ID
+        
+      - name: Upload Python client packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-client-packages
+          path: dist/clients/python/
+          if-no-files-found: error
+          
+  build-java-client:
+    needs: setup
+    if: ${{ needs.setup.outputs.build_java == 'true' || needs.setup.outputs.build_proto == 'true' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Copy Gradle wrapper files
+        run: |
+          mkdir -p clients/java/gradle
+          cp -r gradle/* clients/java/gradle/
+          cp gradlew clients/java/
+          cp gradlew.bat clients/java/
+          chmod +x clients/java/gradlew
+        
+      - name: Build Java client
+        run: |
+          cd clients/java
+          docker build -t goodmem-java-client-builder .
+          
+          # Extract the built JARs
+          mkdir -p ../../dist/clients/java
+          CONTAINER_ID=$(docker create goodmem-java-client-builder)
+          docker cp $CONTAINER_ID:/app/build/libs/. ../../dist/clients/java/
+          docker rm $CONTAINER_ID
+        
+      - name: Upload Java client JARs
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-client-jars
+          path: dist/clients/java/
+          if-no-files-found: error
+          
+  build-dotnet-client:
+    needs: setup
+    if: ${{ needs.setup.outputs.build_dotnet == 'true' || needs.setup.outputs.build_proto == 'true' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Build .NET client
+        run: |
+          cd clients/dotnet
+          docker build -t goodmem-dotnet-client-builder .
+          
+          # Extract the built DLLs
+          mkdir -p ../../dist/clients/dotnet
+          CONTAINER_ID=$(docker create goodmem-dotnet-client-builder)
+          docker cp $CONTAINER_ID:/app/Pairsystems.Goodmem.Client/bin/Release/. ../../dist/clients/dotnet/
+          docker rm $CONTAINER_ID
+        
+      - name: Upload .NET client DLLs
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-client-dlls
+          path: dist/clients/dotnet/
+          if-no-files-found: error
+          
+  build-go-client:
+    needs: setup
+    if: ${{ needs.setup.outputs.build_go == 'true' || needs.setup.outputs.build_proto == 'true' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Build Go client
+        run: |
+          cd clients/go
+          docker build -t goodmem-go-client-builder .
+          
+          # Go client is a library, so prepare source code package
+          mkdir -p ../../dist/clients/go
+          CONTAINER_ID=$(docker create goodmem-go-client-builder)
+          docker cp $CONTAINER_ID:/app/. ../../dist/clients/go/
+          docker rm $CONTAINER_ID
+          
+          # Create a package
+          cd ../../dist/clients/go
+          tar -czf goodmem-client-go.tar.gz *.go go.mod
+        
+      - name: Upload Go client package
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-client-package
+          path: dist/clients/go/goodmem-client-go.tar.gz
+          if-no-files-found: error
+          
+  build-js-client:
+    needs: setup
+    if: ${{ needs.setup.outputs.build_js == 'true' || needs.setup.outputs.build_proto == 'true' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Build JavaScript client
+        run: |
+          cd clients/js
+          docker build -t goodmem-js-client-builder .
+          
+          # Extract the built NPM package
+          mkdir -p ../../dist/clients/js
+          CONTAINER_ID=$(docker create goodmem-js-client-builder)
+          docker cp $CONTAINER_ID:/app/. ../../dist/clients/js/
+          docker rm $CONTAINER_ID
+        
+      - name: Upload JavaScript client package
+        uses: actions/upload-artifact@v4
+        with:
+          name: js-client-package
+          path: dist/clients/js/*.tgz
+          if-no-files-found: error
+          
+  # Optional: Publish to package registries when on main branch
+  publish-packages:
+    needs: [build-python-client, build-java-client, build-dotnet-client, build-go-client, build-js-client]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          
+      - name: Set up Java for publishing
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '8'
+          
+      - name: Publish Java client to GitHub Packages
+        run: |
+          # Copy the artifacts to where Gradle expects them
+          mkdir -p clients/java/build/libs
+          cp artifacts/java-client-jars/* clients/java/build/libs/
+          
+          # Publish using Gradle
+          cd clients/java
+          ../../gradlew -p . publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      # Add additional publish steps for other clients as needed
+      # For example, publishing Python package to PyPI, npm package to npmjs.com, etc.

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "goodmem-client"
+version = "0.1.0"
+description = "Client library for GoodMem"
+requires-python = ">=3.8"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "build>=1.0.0",
+]
+
+[tool.setuptools]
+packages = ["goodmem_client"]
