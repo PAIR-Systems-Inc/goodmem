@@ -158,7 +158,10 @@ func init() {
 	createSpaceCmd.Flags().StringVar(&spaceName, "name", "", "Name of the space")
 	createSpaceCmd.Flags().StringSliceVar(&labels, "label", []string{}, "Labels in key=value format (can be specified multiple times)")
 	createSpaceCmd.Flags().BoolVar(&publicRead, "public-read", false, "Whether the space is publicly readable")
-	createSpaceCmd.MarkFlagRequired("name")
+	if err := createSpaceCmd.MarkFlagRequired("name"); err != nil {
+		// This should only happen if the flag doesn't exist
+		panic(fmt.Sprintf("Failed to mark flag 'name' as required: %v", err))
+	}
 
 	// Flags for list
 	listSpacesCmd.Flags().StringSliceVar(&labels, "label", []string{}, "Filter spaces by label in key=value format (can be specified multiple times)")
