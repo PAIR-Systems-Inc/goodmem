@@ -1,0 +1,47 @@
+# Build artifacts
+dist/
+**/bin/
+**/target/
+
+# Go
+**/vendor/
+**/.go/
+**/go.work
+
+# Java
+**/.gradle/
+**/build/
+**/.idea/
+**/*.iml
+**/out/
+**/.mvn/
+**/target/
+**/*.class
+
+# JS/TS
+**/node_modules/
+**/.npm
+**/.yarn
+**/.pnp.*
+**/.cache/
+**/.parcel-cache/
+**/dist/
+**/build/
+
+# Logs
+**/logs/
+**/*.log
+**/npm-debug.log*
+
+# IDE and editor files
+**/.idea/
+**/.vscode/
+**/*.swp
+**/*.swo
+**/.project
+**/.classpath
+**/.settings/
+
+# OS files
+**/.DS_Store
+**/Thumbs.db

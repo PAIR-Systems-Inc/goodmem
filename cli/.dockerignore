@@ -1,0 +1,15 @@
+# Build artifacts
+goodmem
+*.exe
+*.out
+
+# Test files
+*.test
+
+# Local development files
+.git/
+.gitignore
+*.md
+
+# Go specific
+/vendor/
