@@ -142,3 +142,56 @@ goodmem/
 - Regenerate client code after proto changes
 - Write tests for all new features
 - Follow existing code style and patterns
+
+## CI/CD Pipeline
+
+The project uses GitHub Actions for continuous integration and deployment. The workflows are defined in `.github/workflows/`.
+
+### Main Build Pipeline (`build.yml`)
+
+- **Triggered by**: Push to main, Pull requests, Manual dispatch
+- **Path-based filtering**: Only builds components with changes
+  - Changes to `server/` trigger server build
+  - Changes to `cli/` trigger CLI build
+  - Changes to `proto/` trigger both
+- **Server build**:
+  - Compiles Java code
+  - Runs Java tests
+  - Builds server JAR with Gradle
+  - Checks Java formatting
+  - Uploads server JAR as artifact
+- **CLI build**:
+  - Verifies Go dependencies
+  - Builds Go binary
+  - Runs Go tests
+  - Uploads CLI binary as artifact
+- **Docker build** (main branch only):
+  - Builds server Docker image
+  - Pushes image to GitHub Container Registry
+
+### Code Quality Checks (`code-quality.yml`)
+
+- **Triggered by**: Push to main, Pull requests, Manual dispatch
+- **Java formatting**: Uses `format_java.sh` to check Google Java Format
+- **Go linting**: Uses golangci-lint for Go code quality
+- **Dependency review**: Reviews PR dependencies for vulnerabilities
+
+### Dependency Management
+
+#### Automated Dependency Checks (`dependency-check.yml`)
+- **Runs weekly** on Mondays
+- Uses `check_outdated.sh` to find outdated Java dependencies
+- Uses go-mod-outdated to find outdated Go dependencies
+- Creates GitHub issues with dependency update reports
+
+#### Dependabot Integration (`dependabot.yml`, `dependabot-auto-merge.yml`)
+- **Weekly dependency scans** for Gradle and Go modules
+- **Monthly scans** for GitHub Actions
+- Groups related dependencies to reduce PR noise
+- Automatically approves patch and minor updates
+- Automatically merges patch updates
+
+### Issue Templates
+- Bug report template
+- Dependency update report templates
+- Configuration for directing feature requests to discussions
