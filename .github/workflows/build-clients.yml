@@ -232,9 +232,25 @@ jobs:
           mkdir -p clients/java/build/libs
           cp artifacts/java-client-jars/* clients/java/build/libs/
           
-          # Publish using Gradle
+          # Create a temporary init.gradle to override Java version settings
+          cat > clients/java/init-publish.gradle << EOF
+          allprojects {
+            repositories {
+              mavenCentral()
+            }
+            
+            tasks.withType(JavaCompile) {
+              // For Java 8, we cannot use the --release flag
+              options.release = null
+              sourceCompatibility = JavaVersion.VERSION_1_8
+              targetCompatibility = JavaVersion.VERSION_1_8
+            }
+          }
+          EOF
+          
+          # Publish using Gradle with the init script
           cd clients/java
-          ../../gradlew -p . publish
+          ../../gradlew --init-script init-publish.gradle -p . publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
