@@ -10,7 +10,7 @@ version = "0.1.0"
 
 dependencies {
     // Javalin
-    implementation("io.javalin:javalin:6.1.4")
+    implementation("io.javalin:javalin:6.6.0")
     
     // gRPC
     implementation("io.grpc:grpc-netty-shaded:1.72.0")
@@ -22,7 +22,7 @@ dependencies {
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
     
     // Annotation for generated code
-    implementation("jakarta.annotation:jakarta.annotation-api:2.1.1")
+    implementation("jakarta.annotation:jakarta.annotation-api:3.0.0")
     implementation("javax.annotation:javax.annotation-api:1.3.2")
     
     // Logging
