@@ -1,7 +1,7 @@
 plugins {
     id("java")
     id("application")
-    id("com.google.protobuf")
+    id("com.google.protobuf") version "0.9.5"
     id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
@@ -13,19 +13,36 @@ dependencies {
     implementation("io.javalin:javalin:6.1.4")
     
     // gRPC
-    implementation("io.grpc:grpc-netty-shaded:1.63.0")
-    implementation("io.grpc:grpc-protobuf:1.63.0")
-    implementation("io.grpc:grpc-stub:1.63.0")
+    implementation("io.grpc:grpc-netty-shaded:1.72.0")
+    implementation("io.grpc:grpc-protobuf:1.72.0")
+    implementation("io.grpc:grpc-stub:1.72.0")
+    implementation("io.grpc:grpc-inprocess:1.72.0")
     
     // JSON
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
     
     // Annotation for generated code
     implementation("jakarta.annotation:jakarta.annotation-api:2.1.1")
+    implementation("javax.annotation:javax.annotation-api:1.3.2")
+    
+    // Logging
+    implementation("org.slf4j:slf4j-simple:2.0.17")
 }
 
 application {
     mainClass.set("com.goodmem.Main")
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs("build/generated/source/proto/main/java")
+            srcDirs("build/generated/source/proto/main/grpc")
+        }
+        proto {
+            srcDir("../proto")
+        }
+    }
 }
 
 protobuf {
@@ -34,7 +51,7 @@ protobuf {
     }
     plugins {
         create("grpc") {
-            artifact = "io.grpc:protoc-gen-grpc-java:1.63.0"
+            artifact = "io.grpc:protoc-gen-grpc-java:1.72.0"
         }
     }
     generateProtoTasks {

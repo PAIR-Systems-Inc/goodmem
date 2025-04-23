@@ -1,10 +1,11 @@
 package com.goodmem;
 
-import goodmem.v1.Space.CreateSpaceRequest;
-import goodmem.v1.Space.DeleteSpaceRequest;
-import goodmem.v1.Space.ListSpacesRequest;
-import goodmem.v1.Space.ListSpacesResponse;
-import goodmem.v1.Space.Space;
+import goodmem.v1.SpaceOuterClass.CreateSpaceRequest;
+import goodmem.v1.SpaceOuterClass.DeleteSpaceRequest;
+import goodmem.v1.SpaceOuterClass.ListSpacesRequest;
+import goodmem.v1.SpaceOuterClass.ListSpacesResponse;
+import goodmem.v1.SpaceOuterClass.Space;
+import goodmem.v1.SpaceServiceGrpc;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerInterceptors;
@@ -23,15 +24,19 @@ public class Main {
     private static final int REST_PORT = 8080;
 
     private Server grpcServer;
-    private final SpaceServiceImpl spaceService;
+    private final SpaceServiceImpl serviceImpl;
+    private final SpaceServiceGrpc.SpaceServiceBlockingStub spaceService;
 
     public Main() {
-        this.spaceService = new SpaceServiceImpl();
+        this.serviceImpl = new SpaceServiceImpl();
+        // Create a blocking stub for the REST-to-gRPC bridge
+        this.spaceService = SpaceServiceGrpc.newBlockingStub(
+            io.grpc.inprocess.InProcessChannelBuilder.forName("in-process").build());
     }
 
     public void startGrpcServer() throws IOException {
         grpcServer = ServerBuilder.forPort(GRPC_PORT)
-                .addService(ServerInterceptors.intercept(spaceService, new AuthInterceptor()))
+                .addService(ServerInterceptors.intercept(serviceImpl, new AuthInterceptor()))
                 .build()
                 .start();
         logger.info("gRPC Server started, listening on port " + GRPC_PORT);
@@ -54,7 +59,9 @@ public class Main {
 
     public void startJavalinServer() {
         Javalin app = Javalin.create(config -> {
-            config.plugins.enableCors(cors -> cors.add(it -> it.anyHost()));
+            config.bundledPlugins.enableCors(cors -> {
+                cors.addRule(it -> it.anyHost());
+            });
         }).start(REST_PORT);
 
         // Configure REST routes that map to gRPC methods

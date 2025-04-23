@@ -2,11 +2,11 @@ package com.goodmem;
 
 import com.google.protobuf.Empty;
 import com.google.protobuf.Timestamp;
-import goodmem.v1.Space.CreateSpaceRequest;
-import goodmem.v1.Space.DeleteSpaceRequest;
-import goodmem.v1.Space.ListSpacesRequest;
-import goodmem.v1.Space.ListSpacesResponse;
-import goodmem.v1.Space.Space;
+import goodmem.v1.SpaceOuterClass.CreateSpaceRequest;
+import goodmem.v1.SpaceOuterClass.DeleteSpaceRequest;
+import goodmem.v1.SpaceOuterClass.ListSpacesRequest;
+import goodmem.v1.SpaceOuterClass.ListSpacesResponse;
+import goodmem.v1.SpaceOuterClass.Space;
 import goodmem.v1.SpaceServiceGrpc.SpaceServiceImplBase;
 import io.grpc.stub.StreamObserver;
 
@@ -31,7 +31,7 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
                 .setSpaceId("00000000-0000-0000-0000-000000000001")
                 .setName(request.getName())
                 .putAllLabels(request.getLabelsMap())
-                .setEmbeddingModel(request.hasEmbeddingModel() ? request.getEmbeddingModel() : "openai-ada-002")
+                .setEmbeddingModel(request.getEmbeddingModel().isEmpty() ? "openai-ada-002" : request.getEmbeddingModel())
                 .setCreatedAt(getCurrentTimestamp())
                 .setOwnerId("user-123") // This would be derived from authenticated principal
                 .setPublicRead(request.getPublicRead())
