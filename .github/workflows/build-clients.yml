@@ -232,25 +232,68 @@ jobs:
           mkdir -p clients/java/build/libs
           cp artifacts/java-client-jars/* clients/java/build/libs/
           
-          # Create a temporary init.gradle to override Java version settings
-          cat > clients/java/init-publish.gradle << EOF
-          allprojects {
-            repositories {
+          # Let's create a standalone build and publish script for Java 8
+          cat > publish-java-client.gradle.kts << EOF
+          plugins {
+              id("java")
+              id("java-library")
+              id("maven-publish")
+          }
+          
+          group = "com.pairsystems.goodmem"
+          version = "0.1.0"
+          
+          repositories {
               mavenCentral()
-            }
-            
-            tasks.withType(JavaCompile) {
-              // For Java 8, we cannot use the --release flag
-              options.release = null
+          }
+          
+          java {
               sourceCompatibility = JavaVersion.VERSION_1_8
               targetCompatibility = JavaVersion.VERSION_1_8
-            }
+          }
+          
+          // No compilation needed since we're just publishing existing artifacts
+          tasks.compileJava.configure {
+              enabled = false
+          }
+          
+          publishing {
+              publications {
+                  create<MavenPublication>("maven") {
+                      from(components["java"])
+                      
+                      groupId = "com.pairsystems.goodmem"
+                      artifactId = "goodmem-client-java"
+                      version = "0.1.0"
+                      
+                      pom {
+                          name.set("GoodMem Java Client")
+                          description.set("Java client library for GoodMem services")
+                          licenses {
+                              license {
+                                  name.set("The Apache License, Version 2.0")
+                                  url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
+                              }
+                          }
+                      }
+                  }
+              }
+              
+              repositories {
+                  maven {
+                      name = "GitHubPackages"
+                      url = uri("https://maven.pkg.github.com/PAIR-Systems-Inc/goodmem")
+                      credentials {
+                          username = System.getenv("GITHUB_ACTOR")
+                          password = System.getenv("GITHUB_TOKEN")
+                      }
+                  }
+              }
           }
           EOF
           
-          # Publish using Gradle with the init script
-          cd clients/java
-          ../../gradlew --init-script init-publish.gradle -p . publish
+          # Run standalone publish script
+          ./gradlew -b publish-java-client.gradle.kts publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
