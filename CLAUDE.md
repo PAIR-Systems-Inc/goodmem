@@ -6,15 +6,20 @@
 - **Purpose**: Memory APIs with CLI and UI interfaces
 
 ## Architecture
-- **Source of Truth**: `proto/goodmem/v1/space.proto`
+- **Source of Truth**: Protocol Buffer definitions in `proto/goodmem/v1/`
 - **Components**:
   - Java 21 / Javalin+gRPC server (REST mirrors every RPC)
   - Go CLI client
   - React 19 + Vite UI for browsing memory contents
+  - PostgreSQL database with pgvector extension for vector storage
 - **Service Design**:
   - Dual protocol API (gRPC and REST)
   - In-process service bridging between protocols
   - REST endpoints automatically mapped to gRPC service methods
+  - Standard organization for service implementations:
+    - Each proto service has a corresponding `*ServiceImpl.java` class
+    - REST handlers in `Main.java` with common naming pattern: `handle<Service><Method>`
+    - Utility methods for converting between protocol buffer messages and JSON
 
 ## Tech Stack
 - **Server**:
@@ -22,10 +27,15 @@
   - Javalin 6.6.0 (REST API framework)
   - gRPC 1.72.0 (RPC framework)
   - Protocol Buffers 3.25.5
+  - Protobuf-java-util 3.25.5 (For Timestamp conversions and other utilities)
   - Gradle 8.13 with Shadow plugin 8.1.1 (for building uber JARs)
   - Jackson 2.18.3 (JSON serialization)
   - SLF4J 2.0.17 (Logging)
   - Jakarta Annotation API 3.0.0
+- **Database**:
+  - PostgreSQL 16+ with pgvector extension
+  - Vector dimensions: 1536 (OpenAI Ada-002 default)
+  - HNSW indexing with L2 distance (vector_l2_ops)
 - **CLI**: Go with connect-go
 - **UI**: React 19, Vite
 - **API Definition**: Protocol Buffers v3
@@ -48,6 +58,53 @@
 - Generated code should not be edited manually
 - Make proto field additions backward compatible
 
+### Server Implementation Patterns
+- **Service Implementation Classes**: Create a separate `*ServiceImpl.java` class for each protocol buffer service
+  - Extend the generated `*ImplBase` class (e.g., `SpaceServiceImplBase`)
+  - Implement all methods defined in the service with the StreamObserver pattern
+  - Return dummy data in implementation stubs until database integration
+- **REST to gRPC Bridging**:
+  - Create a blocking stub for each service in `Main.java`
+  - Use in-process channels for efficiency: `InProcessChannelBuilder.forName("in-process").build()`
+  - Follow consistent naming pattern for handler methods: `handle<Service><Method>`
+  - Convert JSON request bodies to protocol buffer requests using appropriate builders
+  - Convert protocol buffer responses to JSON using utility methods
+- **UUID Handling**:
+  - Protocol buffer definitions use binary UUIDs (`bytes`) for better performance
+  - REST API uses hex string representation with standard UUID formatting (8-4-4-4-12)
+  - Use utility methods for conversion: `convertHexToUuidBytes()` and `bytesToHex()`
+- **Timestamps**:
+  - Protocol buffers use `google.protobuf.Timestamp`
+  - REST API uses milliseconds since epoch (long integers)
+  - Use `Timestamps.toMillis()` from protobuf-java-util for conversion
+
+### Database Schema Patterns
+- **Table Organization**:
+  - Use singular table names to match entity concepts (e.g., `user`, `space`, `memory`)
+  - Quote reserved words like `"user"` when using them as table names
+  - Include standard audit fields on all tables:
+    - `created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp`
+    - `updated_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp`
+    - `created_by_id UUID NOT NULL REFERENCES "user"(user_id)`
+    - `updated_by_id UUID NOT NULL REFERENCES "user"(user_id)`
+  - Use `ON DELETE CASCADE` for child entities (e.g., memories belong to spaces)
+  - Use triggers to automatically update `updated_at` timestamps
+- **PostgreSQL Extensions**:
+  - `uuid-ossp`: For UUID generation (`uuid_generate_v4()`)
+  - `pgvector`: For vector embeddings and similarity search
+  - `pgcrypto`: For cryptographic functions
+- **Vector Storage**:
+  - Use `vector(1536)` type for embedding storage
+  - Create HNSW index for efficient similarity search:
+    - `CREATE INDEX ... USING hnsw (embedding_vector vector_l2_ops)`
+  - Consider available distance metrics: L2 (Euclidean), cosine, or inner product
+- **Docker Setup**:
+  - Store database-related files in `/database` directory
+  - Use `database/initdb` for startup SQL scripts:
+    - `00-extensions.sql`: Enable required extensions
+    - `01-schema.sql`: Create tables, indexes, and triggers
+  - Add database service to docker-compose.yml with appropriate health checks
+
 ### Protocol Buffer Best Practices
 - **Always include `go_package` option** in proto files to ensure correct Go import paths
   - Format: `option go_package = "github.com/pairsys/goodmem/cli/gen/goodmem/v1";`
@@ -57,6 +114,12 @@
 - Use compatible protobuf versions with gRPC ecosystem:
   - Server: Protobuf 3.25.x
   - CLI: google.golang.org/protobuf v1.36.x
+- **Use binary UUIDs**: Store UUIDs as `bytes` (16 bytes) instead of strings for better performance
+  - Example: `bytes user_id = 1; // UUID (16 bytes)`
+  - Server implementation must handle conversion between binary UUIDs and hex strings for REST API
+- **Generated class capitalization**: Be aware that generated Java classes may use different capitalization than proto files
+  - Example: A file named `apikey.proto` generates a class named `Apikey.java`, not `ApikeyOuterClass.java`
+  - Always check the actual generated class names in `build/generated/sources/proto/main/java/`
 
 ### Go Best Practices
 - Always check all error return values (required by golangci-lint)
