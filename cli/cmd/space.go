@@ -24,7 +24,7 @@ var (
 var spaceCmd = &cobra.Command{
 	Use:   "space",
 	Short: "Manage GoodMem spaces",
-	Long:  `Create, list, and delete spaces in the GoodMem service.`,
+	Long:  `Create, get, list, update, and delete spaces in the GoodMem service.`,
 }
 
 // createSpaceCmd represents the create command
@@ -129,7 +129,7 @@ var deleteSpaceCmd = &cobra.Command{
 		)
 
 		req := connect.NewRequest(&v1.DeleteSpaceRequest{
-			SpaceId: spaceID,
+			SpaceId: []byte(spaceID),
 		})
 
 		// Add API key header
@@ -145,10 +145,105 @@ var deleteSpaceCmd = &cobra.Command{
 	},
 }
 
+// getSpaceCmd represents the get command
+var getSpaceCmd = &cobra.Command{
+	Use:   "get [space-id]",
+	Short: "Get space details",
+	Long:  `Get details for a specific space by its ID.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		spaceID := args[0]
+		client := v1connect.NewSpaceServiceClient(
+			http.DefaultClient,
+			serverAddress,
+		)
+
+		req := connect.NewRequest(&v1.GetSpaceRequest{
+			SpaceId: []byte(spaceID),
+		})
+
+		// Add API key header
+		req.Header().Set("x-api-key", "test-key")
+
+		resp, err := client.GetSpace(context.Background(), req)
+		if err != nil {
+			return fmt.Errorf("error getting space: %w", err)
+		}
+
+		// Print the space details
+		jsonBytes, err := json.MarshalIndent(resp.Msg, "", "  ")
+		if err != nil {
+			return fmt.Errorf("error marshaling response: %w", err)
+		}
+		fmt.Println(string(jsonBytes))
+		return nil
+	},
+}
+
+// updateSpaceCmd represents the update command
+var updateSpaceCmd = &cobra.Command{
+	Use:   "update [space-id]",
+	Short: "Update a space",
+	Long:  `Update a space in the GoodMem service.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		spaceID := args[0]
+		client := v1connect.NewSpaceServiceClient(
+			http.DefaultClient,
+			serverAddress,
+		)
+
+		// Parse labels from key=value format
+		labelsMap := make(map[string]string)
+		for _, label := range labels {
+			parts := strings.SplitN(label, "=", 2)
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid label format: %s (should be key=value)", label)
+			}
+			labelsMap[parts[0]] = parts[1]
+		}
+
+		updateReq := &v1.UpdateSpaceRequest{
+			SpaceId: []byte(spaceID),
+		}
+
+		// Only set fields that were provided
+		if cmd.Flags().Changed("name") {
+			updateReq.Name = spaceName
+		}
+		if cmd.Flags().Changed("label") {
+			updateReq.Labels = labelsMap
+		}
+		if cmd.Flags().Changed("public-read") {
+			updateReq.PublicRead = publicRead
+		}
+
+		req := connect.NewRequest(updateReq)
+
+		// Add API key header
+		req.Header().Set("x-api-key", "test-key")
+
+		resp, err := client.UpdateSpace(context.Background(), req)
+		if err != nil {
+			return fmt.Errorf("error updating space: %w", err)
+		}
+
+		// Print the updated space
+		jsonBytes, err := json.MarshalIndent(resp.Msg, "", "  ")
+		if err != nil {
+			return fmt.Errorf("error marshaling response: %w", err)
+		}
+		fmt.Println(string(jsonBytes))
+		return nil
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(spaceCmd)
 	spaceCmd.AddCommand(createSpaceCmd)
+	spaceCmd.AddCommand(getSpaceCmd)
 	spaceCmd.AddCommand(listSpacesCmd)
+	spaceCmd.AddCommand(updateSpaceCmd)
 	spaceCmd.AddCommand(deleteSpaceCmd)
 
 	// Global flags for all space commands
@@ -165,4 +260,9 @@ func init() {
 
 	// Flags for list
 	listSpacesCmd.Flags().StringSliceVar(&labels, "label", []string{}, "Filter spaces by label in key=value format (can be specified multiple times)")
+	
+	// Flags for update
+	updateSpaceCmd.Flags().StringVar(&spaceName, "name", "", "New name for the space")
+	updateSpaceCmd.Flags().StringSliceVar(&labels, "label", []string{}, "New labels in key=value format (can be specified multiple times)")
+	updateSpaceCmd.Flags().BoolVar(&publicRead, "public-read", false, "New public-read setting for the space")
 }
