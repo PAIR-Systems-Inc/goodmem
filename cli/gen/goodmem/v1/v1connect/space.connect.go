@@ -37,18 +37,30 @@ const (
 	// SpaceServiceCreateSpaceProcedure is the fully-qualified name of the SpaceService's CreateSpace
 	// RPC.
 	SpaceServiceCreateSpaceProcedure = "/goodmem.v1.SpaceService/CreateSpace"
+	// SpaceServiceGetSpaceProcedure is the fully-qualified name of the SpaceService's GetSpace RPC.
+	SpaceServiceGetSpaceProcedure = "/goodmem.v1.SpaceService/GetSpace"
+	// SpaceServiceListSpacesProcedure is the fully-qualified name of the SpaceService's ListSpaces RPC.
+	SpaceServiceListSpacesProcedure = "/goodmem.v1.SpaceService/ListSpaces"
+	// SpaceServiceUpdateSpaceProcedure is the fully-qualified name of the SpaceService's UpdateSpace
+	// RPC.
+	SpaceServiceUpdateSpaceProcedure = "/goodmem.v1.SpaceService/UpdateSpace"
 	// SpaceServiceDeleteSpaceProcedure is the fully-qualified name of the SpaceService's DeleteSpace
 	// RPC.
 	SpaceServiceDeleteSpaceProcedure = "/goodmem.v1.SpaceService/DeleteSpace"
-	// SpaceServiceListSpacesProcedure is the fully-qualified name of the SpaceService's ListSpaces RPC.
-	SpaceServiceListSpacesProcedure = "/goodmem.v1.SpaceService/ListSpaces"
 )
 
 // SpaceServiceClient is a client for the goodmem.v1.SpaceService service.
 type SpaceServiceClient interface {
+	// Creates a new Space. Owner/creator derived from auth context.
 	CreateSpace(context.Context, *connect_go.Request[v1.CreateSpaceRequest]) (*connect_go.Response[v1.Space], error)
-	DeleteSpace(context.Context, *connect_go.Request[v1.DeleteSpaceRequest]) (*connect_go.Response[emptypb.Empty], error)
+	// Retrieves details of a specific Space.
+	GetSpace(context.Context, *connect_go.Request[v1.GetSpaceRequest]) (*connect_go.Response[v1.Space], error)
+	// Lists Spaces accessible to the caller (filtered by owner, labels etc.)
 	ListSpaces(context.Context, *connect_go.Request[v1.ListSpacesRequest]) (*connect_go.Response[v1.ListSpacesResponse], error)
+	// Updates mutable properties of a Space (e.g., name, labels, public_read).
+	UpdateSpace(context.Context, *connect_go.Request[v1.UpdateSpaceRequest]) (*connect_go.Response[v1.Space], error)
+	// Deletes a Space and its associated content (Memories, Chunks).
+	DeleteSpace(context.Context, *connect_go.Request[v1.DeleteSpaceRequest]) (*connect_go.Response[emptypb.Empty], error)
 }
 
 // NewSpaceServiceClient constructs a client for the goodmem.v1.SpaceService service. By default, it
@@ -66,14 +78,24 @@ func NewSpaceServiceClient(httpClient connect_go.HTTPClient, baseURL string, opt
 			baseURL+SpaceServiceCreateSpaceProcedure,
 			opts...,
 		),
-		deleteSpace: connect_go.NewClient[v1.DeleteSpaceRequest, emptypb.Empty](
+		getSpace: connect_go.NewClient[v1.GetSpaceRequest, v1.Space](
 			httpClient,
-			baseURL+SpaceServiceDeleteSpaceProcedure,
+			baseURL+SpaceServiceGetSpaceProcedure,
 			opts...,
 		),
 		listSpaces: connect_go.NewClient[v1.ListSpacesRequest, v1.ListSpacesResponse](
 			httpClient,
 			baseURL+SpaceServiceListSpacesProcedure,
+			opts...,
+		),
+		updateSpace: connect_go.NewClient[v1.UpdateSpaceRequest, v1.Space](
+			httpClient,
+			baseURL+SpaceServiceUpdateSpaceProcedure,
+			opts...,
+		),
+		deleteSpace: connect_go.NewClient[v1.DeleteSpaceRequest, emptypb.Empty](
+			httpClient,
+			baseURL+SpaceServiceDeleteSpaceProcedure,
 			opts...,
 		),
 	}
@@ -82,8 +104,10 @@ func NewSpaceServiceClient(httpClient connect_go.HTTPClient, baseURL string, opt
 // spaceServiceClient implements SpaceServiceClient.
 type spaceServiceClient struct {
 	createSpace *connect_go.Client[v1.CreateSpaceRequest, v1.Space]
-	deleteSpace *connect_go.Client[v1.DeleteSpaceRequest, emptypb.Empty]
+	getSpace    *connect_go.Client[v1.GetSpaceRequest, v1.Space]
 	listSpaces  *connect_go.Client[v1.ListSpacesRequest, v1.ListSpacesResponse]
+	updateSpace *connect_go.Client[v1.UpdateSpaceRequest, v1.Space]
+	deleteSpace *connect_go.Client[v1.DeleteSpaceRequest, emptypb.Empty]
 }
 
 // CreateSpace calls goodmem.v1.SpaceService.CreateSpace.
@@ -91,9 +115,9 @@ func (c *spaceServiceClient) CreateSpace(ctx context.Context, req *connect_go.Re
 	return c.createSpace.CallUnary(ctx, req)
 }
 
-// DeleteSpace calls goodmem.v1.SpaceService.DeleteSpace.
-func (c *spaceServiceClient) DeleteSpace(ctx context.Context, req *connect_go.Request[v1.DeleteSpaceRequest]) (*connect_go.Response[emptypb.Empty], error) {
-	return c.deleteSpace.CallUnary(ctx, req)
+// GetSpace calls goodmem.v1.SpaceService.GetSpace.
+func (c *spaceServiceClient) GetSpace(ctx context.Context, req *connect_go.Request[v1.GetSpaceRequest]) (*connect_go.Response[v1.Space], error) {
+	return c.getSpace.CallUnary(ctx, req)
 }
 
 // ListSpaces calls goodmem.v1.SpaceService.ListSpaces.
@@ -101,11 +125,28 @@ func (c *spaceServiceClient) ListSpaces(ctx context.Context, req *connect_go.Req
 	return c.listSpaces.CallUnary(ctx, req)
 }
 
+// UpdateSpace calls goodmem.v1.SpaceService.UpdateSpace.
+func (c *spaceServiceClient) UpdateSpace(ctx context.Context, req *connect_go.Request[v1.UpdateSpaceRequest]) (*connect_go.Response[v1.Space], error) {
+	return c.updateSpace.CallUnary(ctx, req)
+}
+
+// DeleteSpace calls goodmem.v1.SpaceService.DeleteSpace.
+func (c *spaceServiceClient) DeleteSpace(ctx context.Context, req *connect_go.Request[v1.DeleteSpaceRequest]) (*connect_go.Response[emptypb.Empty], error) {
+	return c.deleteSpace.CallUnary(ctx, req)
+}
+
 // SpaceServiceHandler is an implementation of the goodmem.v1.SpaceService service.
 type SpaceServiceHandler interface {
+	// Creates a new Space. Owner/creator derived from auth context.
 	CreateSpace(context.Context, *connect_go.Request[v1.CreateSpaceRequest]) (*connect_go.Response[v1.Space], error)
-	DeleteSpace(context.Context, *connect_go.Request[v1.DeleteSpaceRequest]) (*connect_go.Response[emptypb.Empty], error)
+	// Retrieves details of a specific Space.
+	GetSpace(context.Context, *connect_go.Request[v1.GetSpaceRequest]) (*connect_go.Response[v1.Space], error)
+	// Lists Spaces accessible to the caller (filtered by owner, labels etc.)
 	ListSpaces(context.Context, *connect_go.Request[v1.ListSpacesRequest]) (*connect_go.Response[v1.ListSpacesResponse], error)
+	// Updates mutable properties of a Space (e.g., name, labels, public_read).
+	UpdateSpace(context.Context, *connect_go.Request[v1.UpdateSpaceRequest]) (*connect_go.Response[v1.Space], error)
+	// Deletes a Space and its associated content (Memories, Chunks).
+	DeleteSpace(context.Context, *connect_go.Request[v1.DeleteSpaceRequest]) (*connect_go.Response[emptypb.Empty], error)
 }
 
 // NewSpaceServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -119,9 +160,9 @@ func NewSpaceServiceHandler(svc SpaceServiceHandler, opts ...connect_go.HandlerO
 		svc.CreateSpace,
 		opts...,
 	)
-	spaceServiceDeleteSpaceHandler := connect_go.NewUnaryHandler(
-		SpaceServiceDeleteSpaceProcedure,
-		svc.DeleteSpace,
+	spaceServiceGetSpaceHandler := connect_go.NewUnaryHandler(
+		SpaceServiceGetSpaceProcedure,
+		svc.GetSpace,
 		opts...,
 	)
 	spaceServiceListSpacesHandler := connect_go.NewUnaryHandler(
@@ -129,14 +170,28 @@ func NewSpaceServiceHandler(svc SpaceServiceHandler, opts ...connect_go.HandlerO
 		svc.ListSpaces,
 		opts...,
 	)
+	spaceServiceUpdateSpaceHandler := connect_go.NewUnaryHandler(
+		SpaceServiceUpdateSpaceProcedure,
+		svc.UpdateSpace,
+		opts...,
+	)
+	spaceServiceDeleteSpaceHandler := connect_go.NewUnaryHandler(
+		SpaceServiceDeleteSpaceProcedure,
+		svc.DeleteSpace,
+		opts...,
+	)
 	return "/goodmem.v1.SpaceService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SpaceServiceCreateSpaceProcedure:
 			spaceServiceCreateSpaceHandler.ServeHTTP(w, r)
-		case SpaceServiceDeleteSpaceProcedure:
-			spaceServiceDeleteSpaceHandler.ServeHTTP(w, r)
+		case SpaceServiceGetSpaceProcedure:
+			spaceServiceGetSpaceHandler.ServeHTTP(w, r)
 		case SpaceServiceListSpacesProcedure:
 			spaceServiceListSpacesHandler.ServeHTTP(w, r)
+		case SpaceServiceUpdateSpaceProcedure:
+			spaceServiceUpdateSpaceHandler.ServeHTTP(w, r)
+		case SpaceServiceDeleteSpaceProcedure:
+			spaceServiceDeleteSpaceHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -150,10 +205,18 @@ func (UnimplementedSpaceServiceHandler) CreateSpace(context.Context, *connect_go
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("goodmem.v1.SpaceService.CreateSpace is not implemented"))
 }
 
-func (UnimplementedSpaceServiceHandler) DeleteSpace(context.Context, *connect_go.Request[v1.DeleteSpaceRequest]) (*connect_go.Response[emptypb.Empty], error) {
-	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("goodmem.v1.SpaceService.DeleteSpace is not implemented"))
+func (UnimplementedSpaceServiceHandler) GetSpace(context.Context, *connect_go.Request[v1.GetSpaceRequest]) (*connect_go.Response[v1.Space], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("goodmem.v1.SpaceService.GetSpace is not implemented"))
 }
 
 func (UnimplementedSpaceServiceHandler) ListSpaces(context.Context, *connect_go.Request[v1.ListSpacesRequest]) (*connect_go.Response[v1.ListSpacesResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("goodmem.v1.SpaceService.ListSpaces is not implemented"))
+}
+
+func (UnimplementedSpaceServiceHandler) UpdateSpace(context.Context, *connect_go.Request[v1.UpdateSpaceRequest]) (*connect_go.Response[v1.Space], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("goodmem.v1.SpaceService.UpdateSpace is not implemented"))
+}
+
+func (UnimplementedSpaceServiceHandler) DeleteSpace(context.Context, *connect_go.Request[v1.DeleteSpaceRequest]) (*connect_go.Response[emptypb.Empty], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("goodmem.v1.SpaceService.DeleteSpace is not implemented"))
 }

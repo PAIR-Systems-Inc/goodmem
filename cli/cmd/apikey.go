@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/bufbuild/connect-go"
-	"github.com/pairsys/goodmem/cli/gen/goodmem/v1"
-	"github.com/pairsys/goodmem/cli/gen/goodmem/v1/v1connect"
+	v1 "github.com/pairsys/goodmem/cli/gen/goodmem/v1"
+	v1connect "github.com/pairsys/goodmem/cli/gen/goodmem/v1/v1connect"
 	"github.com/spf13/cobra"
 )
 
