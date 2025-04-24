@@ -21,6 +21,9 @@ dependencies {
     // JSON
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.3")
     
+    // Protocol Buffer utilities
+    implementation("com.google.protobuf:protobuf-java-util:3.25.5")
+    
     // Annotation for generated code
     implementation("jakarta.annotation:jakarta.annotation-api:3.0.0")
     implementation("javax.annotation:javax.annotation-api:1.3.2")
