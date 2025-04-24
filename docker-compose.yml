@@ -1,6 +1,27 @@
 version: '3.8'
 
 services:
+  db:
+    build:
+      context: ./database
+      args:
+        PG_VERSION: 16 # Consider updating to 17 when stable
+    container_name: goodmem-db
+    environment:
+      POSTGRES_USER: goodmem_user
+      POSTGRES_PASSWORD: goodmem_password # Use secrets management in production!
+      POSTGRES_DB: goodmem_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U goodmem_user -d goodmem_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   vector-db:
     image: chromadb/chroma:latest
     ports:
@@ -8,6 +29,8 @@ services:
     volumes:
       - chroma-data:/chroma/chroma
     restart: unless-stopped
+    depends_on:
+      - db
 
   server:
     build:
@@ -17,9 +40,15 @@ services:
       - "8080:8080"  # REST API
       - "9090:9090"  # gRPC
     depends_on:
-      - vector-db
+      db:
+        condition: service_healthy
+      vector-db:
+        condition: service_started
     environment:
       - VECTOR_DB_URL=http://vector-db:8000
+      - DB_URL=jdbc:postgresql://db:5432/goodmem_db
+      - DB_USER=goodmem_user
+      - DB_PASSWORD=goodmem_password
     restart: unless-stopped
 
   ui:
@@ -35,4 +64,5 @@ services:
       - server
 
 volumes:
+  pgdata:
   chroma-data:

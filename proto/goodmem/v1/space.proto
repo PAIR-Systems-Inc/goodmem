@@ -12,38 +12,68 @@ import "google/protobuf/timestamp.proto";
 //   bot  – identifies the agent/bot
 //   org  – identifies the organisation or tenant
 message Space {
-  string space_id         = 1;  // UUID
-  string name             = 2;  // human-friendly name, unique per owner
+  bytes space_id = 1; // UUID (16 bytes)
+  string name = 2; // human-friendly name, unique per owner
   map<string, string> labels = 3; // arbitrary k-v pairs, includes reserved keys
-  string embedding_model  = 4;  // e.g. "openai-ada-002"
+  string embedding_model = 4; // e.g. "openai-ada-002"
   google.protobuf.Timestamp created_at = 5;
-  string owner_id         = 6;  // principal that created the space
-  bool public_read        = 7;  // if true, anyone may query
+  bytes owner_id = 6; // User UUID (16 bytes)
+  bool public_read = 7; // if true, anyone may query
+  google.protobuf.Timestamp updated_at = 8; // Added for consistency
+  bytes created_by_id = 9; // User UUID (16 bytes) - Added
+  bytes updated_by_id = 10; // User UUID (16 bytes) - Added
+}
+
+// Service for managing Spaces.
+service SpaceService {
+  // Creates a new Space. Owner/creator derived from auth context.
+  rpc CreateSpace(CreateSpaceRequest) returns (Space);
+  // Retrieves details of a specific Space.
+  rpc GetSpace(GetSpaceRequest) returns (Space);
+  // Lists Spaces accessible to the caller (filtered by owner, labels etc.)
+  rpc ListSpaces(ListSpacesRequest) returns (ListSpacesResponse);
+  // Updates mutable properties of a Space (e.g., name, labels, public_read).
+  rpc UpdateSpace(UpdateSpaceRequest) returns (Space);
+  // Deletes a Space and its associated content (Memories, Chunks).
+  rpc DeleteSpace(DeleteSpaceRequest) returns (google.protobuf.Empty);
 }
 
 message CreateSpaceRequest {
-  string name             = 1;
+  string name = 1;
   map<string, string> labels = 2;
-  string embedding_model  = 3;
-  bool public_read        = 4;
+  string embedding_model = 3;
+  bool public_read = 4;
+  // owner_id and created_by_id derived from auth context.
 }
 
-message DeleteSpaceRequest {
-  string space_id = 1;
+message GetSpaceRequest {
+  bytes space_id = 1; // UUID (16 bytes)
 }
 
 message ListSpacesRequest {
+  // Optional filters
+  bytes owner_id = 1; // Filter by owner (16 bytes UUID) (if admin or for user's own spaces)
   // label_selectors is a partial match: all listed pairs must be present
   // in a Space's labels map for it to be returned.
-  map<string, string> label_selectors = 1;
+  map<string, string> label_selectors = 2; // Partial match on labels
+  // Add pagination fields if needed (page_size, page_token)
 }
 
 message ListSpacesResponse {
   repeated Space spaces = 1;
+  // Add next_page_token if using pagination
 }
 
-service SpaceService {
-  rpc CreateSpace(CreateSpaceRequest) returns (Space);
-  rpc DeleteSpace(DeleteSpaceRequest) returns (google.protobuf.Empty);
-  rpc ListSpaces(ListSpacesRequest)   returns (ListSpacesResponse);
+message UpdateSpaceRequest {
+  bytes space_id = 1; // Required: ID of the space to update (16 bytes UUID)
+  // Optional fields to update. Use field masks for partial updates.
+  string name = 2;
+  map<string, string> labels = 3;
+  bool public_read = 4;
+  // embedding_model is likely immutable after creation?
+  // updated_by_id derived from auth context.
+}
+
+message DeleteSpaceRequest {
+  bytes space_id = 1; // UUID (16 bytes)
 }

@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package goodmem.v1;
+
+option go_package = "github.com/pairsys/goodmem/cli/gen/goodmem/v1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// Represents a user in the GoodMem system.
+message User {
+  bytes user_id = 1; // UUID (16 bytes)
+  string email = 2;
+  string display_name = 3;
+  string username = 4; // Optional
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  // Avoid including sensitive info like password hashes here.
+}
+
+// Basic service for user management (can be expanded)
+service UserService {
+  // Retrieves user details (excluding sensitive info)
+  rpc GetUser(GetUserRequest) returns (User);
+  // Could add ListUsers, UpdateUser (for display_name etc.) if needed
+}
+
+message GetUserRequest {
+  bytes user_id = 1; // Get by UUID (16 bytes)
+  // Alternatively, allow lookup by email if desired
+  // string email = 2;
+}

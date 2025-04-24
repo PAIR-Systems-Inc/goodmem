@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package goodmem.v1;
+
+option go_package = "github.com/pairsys/goodmem/cli/gen/goodmem/v1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// Represents a logical memory unit, potentially containing multiple chunks/vectors.
+message Memory {
+  bytes memory_id = 1; // UUID (16 bytes)
+  bytes space_id = 2; // UUID (16 bytes) of the parent space
+  string original_content_ref = 3; // Reference (e.g., URI, path) or potentially bytes
+  string content_type = 4; // e.g., "text/plain", "application/pdf"
+  map<string, string> metadata = 5; // Arbitrary key-value metadata
+  string processing_status = 6; // e.g., "PENDING", "PROCESSING", "COMPLETED", "FAILED"
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  bytes created_by_id = 9; // User UUID (16 bytes)
+  bytes updated_by_id = 10; // User UUID (16 bytes)
+}
+
+// Represents a chunk derived from a Memory, associated with a vector embedding.
+// NOTE: Chunks might be primarily an internal concept for vector search.
+// Exposing them directly via API might only be needed for advanced use cases or diagnostics.
+// The MemoryService below focuses on the parent Memory object.
+message MemoryChunk {
+  bytes chunk_id = 1; // UUID (16 bytes)
+  bytes memory_id = 2; // UUID (16 bytes) of the parent memory
+  int32 chunk_sequence_number = 3; // Order of the chunk within the memory
+  string chunk_text = 4; // Text content of the chunk (optional if derivable)
+  repeated float embedding_vector = 5; // Vector embedding (e.g., 1536 floats). Not typically sent over API.
+                                      // Server handles actual vector storage/dimensionality.
+  string vector_status = 6; // e.g., "PENDING", "GENERATED", "FAILED"
+  int32 start_offset = 7; // Optional: position in original content
+  int32 end_offset = 8; // Optional: position in original content
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  bytes created_by_id = 11; // User UUID (16 bytes)
+  bytes updated_by_id = 12; // User UUID (16 bytes)
+}
+
+// Service focused on managing Memory entities (write/management path).
+// Assumes chunking and vectorization happen asynchronously based on Memory creation.
+service MemoryService {
+  // Creates a new Memory record, triggering background processing (chunking/vectorization).
+  rpc CreateMemory(CreateMemoryRequest) returns (Memory);
+  // Retrieves details of a specific Memory entity.
+  rpc GetMemory(GetMemoryRequest) returns (Memory);
+  // Lists Memory entities within a Space.
+  rpc ListMemories(ListMemoriesRequest) returns (ListMemoriesResponse);
+  // Deletes a Memory entity and triggers deletion of its associated chunks/vectors.
+  rpc DeleteMemory(DeleteMemoryRequest) returns (google.protobuf.Empty);
+}
+
+message CreateMemoryRequest {
+  bytes space_id = 1; // Required: Space to create the memory in (16 bytes UUID).
+  string original_content_ref = 2; // Reference to content, or bytes payload
+  string content_type = 3;
+  map<string, string> metadata = 4;
+  // created_by_id derived from auth context.
+}
+
+message GetMemoryRequest {
+  bytes memory_id = 1; // UUID (16 bytes)
+}
+
+message ListMemoriesRequest {
+  bytes space_id = 1; // Required: Scope memories to a space (16 bytes UUID).
+  // Add filters (e.g., by metadata, status) and pagination if needed.
+}
+
+message ListMemoriesResponse {
+  repeated Memory memories = 1;
+  // Add pagination tokens if needed.
+}
+
+message DeleteMemoryRequest {
+  bytes memory_id = 1; // UUID (16 bytes)
+}

@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package goodmem.v1;
+
+option go_package = "github.com/pairsys/goodmem/cli/gen/goodmem/v1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// Represents an API key for authenticating requests.
+message ApiKey {
+  bytes api_key_id = 1; // UUID (16 bytes), primary identifier for the key record
+  bytes user_id = 2; // UUID (16 bytes) of the user this key belongs to
+  string key_prefix = 3; // First few characters of the key for display/identification
+  // DO NOT include key_hash or the raw key in standard responses.
+  Status status = 4; // Status of the key
+  map<string, string> labels = 5; // User-defined labels for the key
+  google.protobuf.Timestamp expires_at = 6; // Optional expiration time
+  google.protobuf.Timestamp last_used_at = 7; // Optional: Track last usage time
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  bytes created_by_id = 10; // User UUID (16 bytes) (usually the key owner or an admin)
+  bytes updated_by_id = 11; // User UUID (16 bytes)
+}
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  ACTIVE = 1;
+  INACTIVE = 2;
+}
+
+// Service for managing API Keys.
+service ApiKeyService {
+  // Creates a new API key for the authenticated user.
+  // The raw key is returned ONLY in this response.
+  rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);
+  // Lists API keys belonging to the authenticated user (or admin specified user).
+  rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse);
+  // Updates mutable properties of an API key (e.g., labels, status).
+  rpc UpdateApiKey(UpdateApiKeyRequest) returns (ApiKey);
+  // Deletes (revokes) an API key.
+  rpc DeleteApiKey(DeleteApiKeyRequest) returns (google.protobuf.Empty);
+}
+
+message CreateApiKeyRequest {
+  map<string, string> labels = 1; // Optional labels for the new key
+  google.protobuf.Timestamp expires_at = 2; // Optional expiration
+  // user_id and created_by_id derived from auth context.
+}
+
+// Special response for creation - includes the raw key.
+message CreateApiKeyResponse {
+  ApiKey api_key_metadata = 1; // The metadata record created (excluding raw key/hash)
+  string raw_api_key = 2; // The actual generated API key - client MUST save this.
+}
+
+message ListApiKeysRequest {
+  // user_id derived from auth context unless admin requests specific user.
+  // bytes user_id_filter = 1; // Optional: For admins to list keys for other users (16 bytes UUID)
+  // Add pagination if needed.
+}
+
+message ListApiKeysResponse {
+  repeated ApiKey keys = 1; // List of keys (metadata only)
+  // Add pagination tokens if needed.
+}
+
+message UpdateApiKeyRequest {
+  bytes api_key_id = 1; // Required: ID of the key to update (16 bytes UUID)
+  // Optional fields to update. Use field masks for partial updates.
+  map<string, string> labels = 2;
+  Status status = 3;
+  // updated_by_id derived from auth context.
+}
+
+message DeleteApiKeyRequest {
+  bytes api_key_id = 1; // Required: ID of the key to delete/revoke (16 bytes UUID).
+}
