@@ -30,21 +30,25 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
     // TODO: Create embedding index
 
     // For now, return dummy data
-    Space space = Space.newBuilder()
-        .setSpaceId(getBytesFromUUID(UUID.randomUUID()))
-        .setName(request.getName())
-        .putAllLabels(request.getLabelsMap())
-        .setEmbeddingModel(
-            request.getEmbeddingModel().isEmpty()
-                ? "openai-ada-002"
-                : request.getEmbeddingModel())
-        .setCreatedAt(getCurrentTimestamp())
-        .setUpdatedAt(getCurrentTimestamp())
-        .setOwnerId(getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth context
-        .setCreatedById(getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth context
-        .setUpdatedById(getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth context
-        .setPublicRead(request.getPublicRead())
-        .build();
+    Space space =
+        Space.newBuilder()
+            .setSpaceId(getBytesFromUUID(UUID.randomUUID()))
+            .setName(request.getName())
+            .putAllLabels(request.getLabelsMap())
+            .setEmbeddingModel(
+                request.getEmbeddingModel().isEmpty()
+                    ? "openai-ada-002"
+                    : request.getEmbeddingModel())
+            .setCreatedAt(getCurrentTimestamp())
+            .setUpdatedAt(getCurrentTimestamp())
+            .setOwnerId(
+                getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth context
+            .setCreatedById(
+                getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth context
+            .setUpdatedById(
+                getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth context
+            .setPublicRead(request.getPublicRead())
+            .build();
 
     responseObserver.onNext(space);
     responseObserver.onCompleted();
@@ -59,19 +63,20 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
     // TODO: Check permissions
 
     // For now, return dummy data
-    Space space = Space.newBuilder()
-        .setSpaceId(request.getSpaceId())
-        .setName("Example Space")
-        .putLabels("user", "alice")
-        .putLabels("bot", "copilot")
-        .setEmbeddingModel("openai-ada-002")
-        .setCreatedAt(getCurrentTimestamp())
-        .setUpdatedAt(getCurrentTimestamp())
-        .setOwnerId(getBytesFromUUID(UUID.randomUUID()))
-        .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
-        .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
-        .setPublicRead(true)
-        .build();
+    Space space =
+        Space.newBuilder()
+            .setSpaceId(request.getSpaceId())
+            .setName("Example Space")
+            .putLabels("user", "alice")
+            .putLabels("bot", "copilot")
+            .setEmbeddingModel("openai-ada-002")
+            .setCreatedAt(getCurrentTimestamp())
+            .setUpdatedAt(getCurrentTimestamp())
+            .setOwnerId(getBytesFromUUID(UUID.randomUUID()))
+            .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
+            .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
+            .setPublicRead(true)
+            .build();
 
     responseObserver.onNext(space);
     responseObserver.onCompleted();
@@ -100,19 +105,20 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
     // TODO: Provide pagination
 
     // For now, return a dummy space
-    Space dummySpace = Space.newBuilder()
-        .setSpaceId(getBytesFromUUID(UUID.randomUUID()))
-        .setName("Example Space")
-        .putLabels("user", "alice")
-        .putLabels("bot", "copilot")
-        .setEmbeddingModel("openai-ada-002")
-        .setCreatedAt(getCurrentTimestamp())
-        .setUpdatedAt(getCurrentTimestamp())
-        .setOwnerId(getBytesFromUUID(UUID.randomUUID()))
-        .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
-        .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
-        .setPublicRead(true)
-        .build();
+    Space dummySpace =
+        Space.newBuilder()
+            .setSpaceId(getBytesFromUUID(UUID.randomUUID()))
+            .setName("Example Space")
+            .putLabels("user", "alice")
+            .putLabels("bot", "copilot")
+            .setEmbeddingModel("openai-ada-002")
+            .setCreatedAt(getCurrentTimestamp())
+            .setUpdatedAt(getCurrentTimestamp())
+            .setOwnerId(getBytesFromUUID(UUID.randomUUID()))
+            .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
+            .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
+            .setPublicRead(true)
+            .build();
 
     ListSpacesResponse response = ListSpacesResponse.newBuilder().addSpaces(dummySpace).build();
 
@@ -129,18 +135,19 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
     // TODO: Update in database
 
     // For now, return a dummy updated space
-    Space updatedSpace = Space.newBuilder()
-        .setSpaceId(request.getSpaceId())
-        .setName(request.getName().isEmpty() ? "Example Space" : request.getName())
-        .putAllLabels(request.getLabelsMap())
-        .setEmbeddingModel("openai-ada-002")
-        .setCreatedAt(getCurrentTimestamp())
-        .setUpdatedAt(getCurrentTimestamp())
-        .setOwnerId(getBytesFromUUID(UUID.randomUUID()))
-        .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
-        .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
-        .setPublicRead(request.getPublicRead())
-        .build();
+    Space updatedSpace =
+        Space.newBuilder()
+            .setSpaceId(request.getSpaceId())
+            .setName(request.getName().isEmpty() ? "Example Space" : request.getName())
+            .putAllLabels(request.getLabelsMap())
+            .setEmbeddingModel("openai-ada-002")
+            .setCreatedAt(getCurrentTimestamp())
+            .setUpdatedAt(getCurrentTimestamp())
+            .setOwnerId(getBytesFromUUID(UUID.randomUUID()))
+            .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
+            .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
+            .setPublicRead(request.getPublicRead())
+            .build();
 
     responseObserver.onNext(updatedSpace);
     responseObserver.onCompleted();
@@ -157,9 +164,9 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
     bb.putLong(uuid.getLeastSignificantBits());
     return ByteString.copyFrom(bb.array());
   }
-  
+
   private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
-  
+
   private String bytesToHex(byte[] bytes) {
     char[] hexChars = new char[bytes.length * 2];
     for (int j = 0; j < bytes.length; j++) {

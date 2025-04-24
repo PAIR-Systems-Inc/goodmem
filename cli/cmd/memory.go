@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// nolint:unused
 var (
 	spaceID            string
 	memoryID           string

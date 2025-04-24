@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// nolint:unused
 var userID string
 
 // userCmd represents the user command

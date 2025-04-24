@@ -23,14 +23,15 @@ public class UserServiceImpl extends UserServiceImplBase {
     // TODO: Check permissions
 
     // For now, return dummy data
-    User user = User.newBuilder()
-        .setUserId(getBytesFromUUID(UUID.randomUUID()))
-        .setEmail("user@example.com")
-        .setDisplayName("Example User")
-        .setUsername("exampleuser")
-        .setCreatedAt(getCurrentTimestamp())
-        .setUpdatedAt(getCurrentTimestamp())
-        .build();
+    User user =
+        User.newBuilder()
+            .setUserId(getBytesFromUUID(UUID.randomUUID()))
+            .setEmail("user@example.com")
+            .setDisplayName("Example User")
+            .setUsername("exampleuser")
+            .setCreatedAt(getCurrentTimestamp())
+            .setUpdatedAt(getCurrentTimestamp())
+            .build();
 
     responseObserver.onNext(user);
     responseObserver.onCompleted();

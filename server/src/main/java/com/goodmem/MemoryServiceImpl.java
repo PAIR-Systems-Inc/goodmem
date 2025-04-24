@@ -9,7 +9,6 @@ import goodmem.v1.MemoryOuterClass.GetMemoryRequest;
 import goodmem.v1.MemoryOuterClass.ListMemoriesRequest;
 import goodmem.v1.MemoryOuterClass.ListMemoriesResponse;
 import goodmem.v1.MemoryOuterClass.Memory;
-import goodmem.v1.MemoryOuterClass.MemoryChunk;
 import goodmem.v1.MemoryServiceGrpc.MemoryServiceImplBase;
 import io.grpc.stub.StreamObserver;
 import java.nio.ByteBuffer;
@@ -31,18 +30,19 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
     // TODO: Queue for processing (chunking, vectorization)
 
     // For now, return dummy data
-    Memory memory = Memory.newBuilder()
-        .setMemoryId(getBytesFromUUID(UUID.randomUUID()))
-        .setSpaceId(request.getSpaceId())
-        .setOriginalContentRef(request.getOriginalContentRef())
-        .setContentType(request.getContentType())
-        .putAllMetadata(request.getMetadataMap())
-        .setProcessingStatus("PENDING")
-        .setCreatedAt(getCurrentTimestamp())
-        .setUpdatedAt(getCurrentTimestamp())
-        .setCreatedById(getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth
-        .setUpdatedById(getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth
-        .build();
+    Memory memory =
+        Memory.newBuilder()
+            .setMemoryId(getBytesFromUUID(UUID.randomUUID()))
+            .setSpaceId(request.getSpaceId())
+            .setOriginalContentRef(request.getOriginalContentRef())
+            .setContentType(request.getContentType())
+            .putAllMetadata(request.getMetadataMap())
+            .setProcessingStatus("PENDING")
+            .setCreatedAt(getCurrentTimestamp())
+            .setUpdatedAt(getCurrentTimestamp())
+            .setCreatedById(getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth
+            .setUpdatedById(getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth
+            .build();
 
     responseObserver.onNext(memory);
     responseObserver.onCompleted();
@@ -57,19 +57,20 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
     // TODO: Check permissions
 
     // For now, return dummy data
-    Memory memory = Memory.newBuilder()
-        .setMemoryId(request.getMemoryId())
-        .setSpaceId(getBytesFromUUID(UUID.randomUUID()))
-        .setOriginalContentRef("s3://example-bucket/content.txt")
-        .setContentType("text/plain")
-        .putMetadata("source", "example-source")
-        .putMetadata("category", "example-category")
-        .setProcessingStatus("COMPLETED")
-        .setCreatedAt(getCurrentTimestamp())
-        .setUpdatedAt(getCurrentTimestamp())
-        .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
-        .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
-        .build();
+    Memory memory =
+        Memory.newBuilder()
+            .setMemoryId(request.getMemoryId())
+            .setSpaceId(getBytesFromUUID(UUID.randomUUID()))
+            .setOriginalContentRef("s3://example-bucket/content.txt")
+            .setContentType("text/plain")
+            .putMetadata("source", "example-source")
+            .putMetadata("category", "example-category")
+            .setProcessingStatus("COMPLETED")
+            .setCreatedAt(getCurrentTimestamp())
+            .setUpdatedAt(getCurrentTimestamp())
+            .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
+            .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
+            .build();
 
     responseObserver.onNext(memory);
     responseObserver.onCompleted();
@@ -86,23 +87,23 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
     // TODO: Apply pagination
 
     // For now, return dummy data
-    Memory dummyMemory = Memory.newBuilder()
-        .setMemoryId(getBytesFromUUID(UUID.randomUUID()))
-        .setSpaceId(request.getSpaceId())
-        .setOriginalContentRef("s3://example-bucket/content.txt")
-        .setContentType("text/plain")
-        .putMetadata("source", "example-source")
-        .putMetadata("category", "example-category")
-        .setProcessingStatus("COMPLETED")
-        .setCreatedAt(getCurrentTimestamp())
-        .setUpdatedAt(getCurrentTimestamp())
-        .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
-        .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
-        .build();
+    Memory dummyMemory =
+        Memory.newBuilder()
+            .setMemoryId(getBytesFromUUID(UUID.randomUUID()))
+            .setSpaceId(request.getSpaceId())
+            .setOriginalContentRef("s3://example-bucket/content.txt")
+            .setContentType("text/plain")
+            .putMetadata("source", "example-source")
+            .putMetadata("category", "example-category")
+            .setProcessingStatus("COMPLETED")
+            .setCreatedAt(getCurrentTimestamp())
+            .setUpdatedAt(getCurrentTimestamp())
+            .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
+            .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
+            .build();
 
-    ListMemoriesResponse response = ListMemoriesResponse.newBuilder()
-        .addMemories(dummyMemory)
-        .build();
+    ListMemoriesResponse response =
+        ListMemoriesResponse.newBuilder().addMemories(dummyMemory).build();
 
     responseObserver.onNext(response);
     responseObserver.onCompleted();
@@ -132,9 +133,9 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
     bb.putLong(uuid.getLeastSignificantBits());
     return ByteString.copyFrom(bb.array());
   }
-  
+
   private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
-  
+
   private String bytesToHex(byte[] bytes) {
     char[] hexChars = new char[bytes.length * 2];
     for (int j = 0; j < bytes.length; j++) {

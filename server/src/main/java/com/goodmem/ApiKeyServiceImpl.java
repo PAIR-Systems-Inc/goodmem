@@ -3,6 +3,7 @@ package com.goodmem;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Empty;
 import com.google.protobuf.Timestamp;
+import goodmem.v1.ApiKeyServiceGrpc.ApiKeyServiceImplBase;
 import goodmem.v1.Apikey.ApiKey;
 import goodmem.v1.Apikey.CreateApiKeyRequest;
 import goodmem.v1.Apikey.CreateApiKeyResponse;
@@ -11,7 +12,6 @@ import goodmem.v1.Apikey.ListApiKeysRequest;
 import goodmem.v1.Apikey.ListApiKeysResponse;
 import goodmem.v1.Apikey.Status;
 import goodmem.v1.Apikey.UpdateApiKeyRequest;
-import goodmem.v1.ApiKeyServiceGrpc.ApiKeyServiceImplBase;
 import io.grpc.stub.StreamObserver;
 import java.nio.ByteBuffer;
 import java.time.Instant;
@@ -36,27 +36,26 @@ public class ApiKeyServiceImpl extends ApiKeyServiceImplBase {
     String keyPrefix = rawApiKey.substring(0, 8);
 
     // For now, return dummy data
-    ApiKey apiKey = ApiKey.newBuilder()
-        .setApiKeyId(getBytesFromUUID(UUID.randomUUID()))
-        .setUserId(getBytesFromUUID(UUID.randomUUID())) // From auth context
-        .setKeyPrefix(keyPrefix)
-        .setStatus(Status.ACTIVE)
-        .putAllLabels(request.getLabelsMap())
-        .setCreatedAt(getCurrentTimestamp())
-        .setUpdatedAt(getCurrentTimestamp())
-        .setCreatedById(getBytesFromUUID(UUID.randomUUID())) // From auth context
-        .setUpdatedById(getBytesFromUUID(UUID.randomUUID())) // From auth context
-        .build();
+    ApiKey apiKey =
+        ApiKey.newBuilder()
+            .setApiKeyId(getBytesFromUUID(UUID.randomUUID()))
+            .setUserId(getBytesFromUUID(UUID.randomUUID())) // From auth context
+            .setKeyPrefix(keyPrefix)
+            .setStatus(Status.ACTIVE)
+            .putAllLabels(request.getLabelsMap())
+            .setCreatedAt(getCurrentTimestamp())
+            .setUpdatedAt(getCurrentTimestamp())
+            .setCreatedById(getBytesFromUUID(UUID.randomUUID())) // From auth context
+            .setUpdatedById(getBytesFromUUID(UUID.randomUUID())) // From auth context
+            .build();
 
     // Only set expiresAt if it's provided
     if (request.hasExpiresAt()) {
       apiKey = apiKey.toBuilder().setExpiresAt(request.getExpiresAt()).build();
     }
 
-    CreateApiKeyResponse response = CreateApiKeyResponse.newBuilder()
-        .setApiKeyMetadata(apiKey)
-        .setRawApiKey(rawApiKey)
-        .build();
+    CreateApiKeyResponse response =
+        CreateApiKeyResponse.newBuilder().setApiKeyMetadata(apiKey).setRawApiKey(rawApiKey).build();
 
     responseObserver.onNext(response);
     responseObserver.onCompleted();
@@ -72,21 +71,20 @@ public class ApiKeyServiceImpl extends ApiKeyServiceImplBase {
     // TODO: Apply pagination
 
     // For now, return dummy data
-    ApiKey dummyKey = ApiKey.newBuilder()
-        .setApiKeyId(getBytesFromUUID(UUID.randomUUID()))
-        .setUserId(getBytesFromUUID(UUID.randomUUID()))
-        .setKeyPrefix("gm_12345")
-        .setStatus(Status.ACTIVE)
-        .putLabels("purpose", "testing")
-        .setCreatedAt(getCurrentTimestamp())
-        .setUpdatedAt(getCurrentTimestamp())
-        .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
-        .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
-        .build();
+    ApiKey dummyKey =
+        ApiKey.newBuilder()
+            .setApiKeyId(getBytesFromUUID(UUID.randomUUID()))
+            .setUserId(getBytesFromUUID(UUID.randomUUID()))
+            .setKeyPrefix("gm_12345")
+            .setStatus(Status.ACTIVE)
+            .putLabels("purpose", "testing")
+            .setCreatedAt(getCurrentTimestamp())
+            .setUpdatedAt(getCurrentTimestamp())
+            .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
+            .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
+            .build();
 
-    ListApiKeysResponse response = ListApiKeysResponse.newBuilder()
-        .addKeys(dummyKey)
-        .build();
+    ListApiKeysResponse response = ListApiKeysResponse.newBuilder().addKeys(dummyKey).build();
 
     responseObserver.onNext(response);
     responseObserver.onCompleted();
@@ -101,17 +99,18 @@ public class ApiKeyServiceImpl extends ApiKeyServiceImplBase {
     // TODO: Update in database
 
     // For now, return dummy data
-    ApiKey updatedKey = ApiKey.newBuilder()
-        .setApiKeyId(request.getApiKeyId())
-        .setUserId(getBytesFromUUID(UUID.randomUUID()))
-        .setKeyPrefix("gm_12345")
-        .setStatus(Status.ACTIVE) // Default to ACTIVE if not specified
-        .putAllLabels(request.getLabelsMap())
-        .setCreatedAt(getCurrentTimestamp())
-        .setUpdatedAt(getCurrentTimestamp())
-        .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
-        .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
-        .build();
+    ApiKey updatedKey =
+        ApiKey.newBuilder()
+            .setApiKeyId(request.getApiKeyId())
+            .setUserId(getBytesFromUUID(UUID.randomUUID()))
+            .setKeyPrefix("gm_12345")
+            .setStatus(Status.ACTIVE) // Default to ACTIVE if not specified
+            .putAllLabels(request.getLabelsMap())
+            .setCreatedAt(getCurrentTimestamp())
+            .setUpdatedAt(getCurrentTimestamp())
+            .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
+            .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
+            .build();
 
     responseObserver.onNext(updatedKey);
     responseObserver.onCompleted();
@@ -140,9 +139,9 @@ public class ApiKeyServiceImpl extends ApiKeyServiceImplBase {
     bb.putLong(uuid.getLeastSignificantBits());
     return ByteString.copyFrom(bb.array());
   }
-  
+
   private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
-  
+
   private String bytesToHex(byte[] bytes) {
     char[] hexChars = new char[bytes.length * 2];
     for (int j = 0; j < bytes.length; j++) {
