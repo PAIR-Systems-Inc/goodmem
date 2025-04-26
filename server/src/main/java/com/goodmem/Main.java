@@ -37,8 +37,10 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -128,6 +130,7 @@ public class Main {
 
     // User endpoints
     app.get("/v1/users/{id}", this::handleGetUser);
+    app.post("/v1/system/init", this::handleSystemInit);
 
     // Memory endpoints
     app.post("/v1/memories", this::handleCreateMemory);
@@ -531,6 +534,56 @@ public class Main {
           + hex.substring(20, 32);
     } else {
       return new String(hexChars);
+    }
+  }
+
+  /**
+   * Handles the system initialization endpoint. This special endpoint doesn't require
+   * authentication and is used to set up the initial admin user. If the root user already exists,
+   * it returns a message indicating the system is already initialized. If the root user doesn't
+   * exist, it creates the root user and an API key.
+   */
+  private void handleSystemInit(Context ctx) {
+    logger.info("REST SystemInit request");
+
+    // Set up database connection
+    try (var connection =
+        java.sql.DriverManager.getConnection(
+            System.getProperty("DB_URL", "jdbc:postgresql://localhost:5432/goodmem"),
+            System.getProperty("DB_USER", "goodmem"),
+            System.getProperty("DB_PASSWORD", "goodmem"))) {
+
+      // Create and execute the operation
+      var operation = new com.goodmem.operations.SystemInitOperation(connection);
+      var result = operation.execute();
+
+      if (!result.isSuccess()) {
+        logger.severe("System initialization failed: " + result.getErrorMessage());
+        ctx.status(500).json(Map.of("error", result.getErrorMessage()));
+        return;
+      }
+
+      if (result.isAlreadyInitialized()) {
+        logger.info("System is already initialized");
+        ctx.status(200)
+            .json(Map.of("initialized", true, "message", "System is already initialized"));
+        return;
+      }
+
+      // Return the successful initialization with the API key
+      logger.info("System initialized successfully");
+      ctx.status(200)
+          .json(
+              Map.of(
+                  "initialized", true,
+                  "message", "System initialized successfully",
+                  "root_api_key", result.getApiKey(),
+                  "user_id", result.getUserId().toString()));
+
+    } catch (Exception e) {
+      logger.severe("Error during system initialization: " + e.getMessage());
+      e.printStackTrace();
+      ctx.status(500).json(Map.of("error", "Internal server error: " + e.getMessage()));
     }
   }
 
