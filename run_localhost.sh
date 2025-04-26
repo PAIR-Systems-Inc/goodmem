@@ -44,15 +44,23 @@ if [[ "$SHOW_HELP" == "true" ]]; then
   exit 0
 fi
 
-# --- Configuration Variables ---
-# Use environment variables if set, otherwise use defaults.
-# IMPORTANT: Change default passwords for any real use!
+# --- Load Configuration Variables ---
+# Source the shared configuration file
+CONFIG_FILE="$(dirname "$0")/config/local_dev.env"
+if [ -f "$CONFIG_FILE" ]; then
+  echo "Loading configuration from $CONFIG_FILE"
+  source "$CONFIG_FILE"
+else
+  echo "Warning: Configuration file $CONFIG_FILE not found. Using default values."
+fi
+
+# Use environment variables if set, otherwise use values from config file or defaults
 export DATA_DIR_BASE="${DATA_DIR_BASE:-$HOME/data/goodmem}" # Base directory for host volumes
-export POSTGRES_USER="${POSTGRES_USER:-pg_goodmem}"
-export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-ayk317gk}"
+export POSTGRES_USER="${POSTGRES_USER:-goodmem_user}"
+export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-CHANGEME_pg_password}"
 export POSTGRES_DB="${POSTGRES_DB:-goodmem_db}"
-export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minio_goodmem}"
-export MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-frkefi2b}"
+export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-CHANGEME_minio_key}"
+export MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-CHANGEME_minio_secret}"
 export MINIO_BUCKET_NAME="${MINIO_BUCKET_NAME:-goodmem-content}"
 
 # --- Ensure Data Directories Exist ---
@@ -118,15 +126,20 @@ echo "To view logs: docker compose logs -f"
 echo "To stop:      docker compose down"
 echo ""
 
-# Print IntelliJ environment variables if server is excluded
+# Print IntelliJ information if server is excluded
 if [[ "$EXCLUDE_SERVER" == "true" ]]; then
-  echo "For IntelliJ / local development, add these environment variables to your Run Configuration:"
-  echo "DB_URL=jdbc:postgresql://localhost:5432/${POSTGRES_DB}"
-  echo "DB_USER=${POSTGRES_USER}"
-  echo "DB_PASSWORD=${POSTGRES_PASSWORD}"
-  echo "MINIO_ENDPOINT=http://localhost:9000"
-  echo "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}"
-  echo "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}"
-  echo "MINIO_BUCKET=${MINIO_BUCKET_NAME}"
+  echo "For IntelliJ / local development, you can update your run configuration automatically:"
+  echo "  ./config/update_intellij_config.sh"
+  echo ""
+  echo "This will update the IntelliJ run configuration with these environment variables:"
+  echo "  DB_URL=jdbc:postgresql://localhost:5432/${POSTGRES_DB}"
+  echo "  DB_USER=${POSTGRES_USER}"
+  echo "  DB_PASSWORD=${POSTGRES_PASSWORD}"
+  echo "  MINIO_ENDPOINT=http://localhost:9000"
+  echo "  MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}"
+  echo "  MINIO_SECRET_KEY=${MINIO_SECRET_KEY}"
+  echo "  MINIO_BUCKET=${MINIO_BUCKET_NAME}"
+  echo ""
+  echo "Note: Run the update script after making changes to config/local_dev.env"
   echo ""
 fi
