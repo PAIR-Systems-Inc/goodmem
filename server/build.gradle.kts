@@ -30,6 +30,17 @@ dependencies {
     
     // Logging
     implementation("org.slf4j:slf4j-simple:2.0.17")
+    
+    // Database
+    implementation("org.postgresql:postgresql:42.7.3")
+    implementation("com.google.guava:guava:33.0.0-jre")
+    
+    // Testing
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+    testImplementation("org.testcontainers:testcontainers:1.20.0")
+    testImplementation("org.testcontainers:junit-jupiter:1.20.0")
+    testImplementation("org.testcontainers:postgresql:1.20.0")
 }
 
 application {
@@ -80,4 +91,8 @@ tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJ
     archiveBaseName.set("goodmem-server")
     archiveClassifier.set("")
     archiveVersion.set("")
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }
