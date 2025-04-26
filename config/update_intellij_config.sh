@@ -18,38 +18,28 @@ mkdir -p "${RUN_CONFIG_DIR}"
 # Source the configuration file to get variable values
 source "${CONFIG_FILE}"
 
-# Create envs block for IntelliJ XML
-ENV_BLOCK="    <envs>
-      <env name=\"DB_URL\" value=\"jdbc:postgresql://localhost:5432/${POSTGRES_DB}\" />
-      <env name=\"DB_USER\" value=\"${POSTGRES_USER}\" />
-      <env name=\"DB_PASSWORD\" value=\"${POSTGRES_PASSWORD}\" />
-      <env name=\"MINIO_ENDPOINT\" value=\"http://localhost:9000\" />
-      <env name=\"MINIO_ACCESS_KEY\" value=\"${MINIO_ACCESS_KEY}\" />
-      <env name=\"MINIO_SECRET_KEY\" value=\"${MINIO_SECRET_KEY}\" />
-      <env name=\"MINIO_BUCKET\" value=\"${MINIO_BUCKET_NAME}\" />
-    </envs>"
-
 # Check if Main.xml exists
 if [ -f "${MAIN_CONFIG}" ]; then
-  # Update existing file
+  # We'll create a completely new file rather than trying to modify in place
   echo "Updating existing configuration file: ${MAIN_CONFIG}"
-  # Replace the env block using sed
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS sed requires an empty string for -i flag
-    sed -i '' -e "/<envs>/,/<\/envs>/c\\
-${ENV_BLOCK}" "${MAIN_CONFIG}"
-  else
-    # Linux sed
-    sed -i -e "/<envs>/,/<\/envs>/c\\
-${ENV_BLOCK}" "${MAIN_CONFIG}"
-  fi
+  rm -f "${MAIN_CONFIG}"
 else
-  # Create a new file
   echo "Creating new configuration file: ${MAIN_CONFIG}"
-  cat > "${MAIN_CONFIG}" << EOF
+fi
+
+# Create the file from scratch with the current environment variables
+cat > "${MAIN_CONFIG}" << EOF
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Main" type="Application" factoryName="Application" nameIsGenerated="true">
-${ENV_BLOCK}
+    <envs>
+      <env name="DB_URL" value="jdbc:postgresql://localhost:5432/${POSTGRES_DB}" />
+      <env name="DB_USER" value="${POSTGRES_USER}" />
+      <env name="DB_PASSWORD" value="${POSTGRES_PASSWORD}" />
+      <env name="MINIO_ENDPOINT" value="http://localhost:9000" />
+      <env name="MINIO_ACCESS_KEY" value="${MINIO_ACCESS_KEY}" />
+      <env name="MINIO_SECRET_KEY" value="${MINIO_SECRET_KEY}" />
+      <env name="MINIO_BUCKET" value="${MINIO_BUCKET_NAME}" />
+    </envs>
     <option name="MAIN_CLASS_NAME" value="com.goodmem.Main" />
     <module name="goodmem.server.main" />
     <extension name="coverage">
@@ -64,7 +54,6 @@ ${ENV_BLOCK}
   </configuration>
 </component>
 EOF
-fi
 
 echo "IntelliJ run configuration updated successfully!"
 echo "Environment variables set:"
