@@ -1,7 +1,7 @@
 package com.goodmem.db;
 
+import com.goodmem.common.status.StatusOr;
 import com.goodmem.db.util.DbUtil;
-import com.goodmem.db.util.StatusOr;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;

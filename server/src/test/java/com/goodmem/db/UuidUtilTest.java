@@ -1,6 +1,6 @@
 package com.goodmem.db;
 
-import com.goodmem.db.util.StatusOr;
+import com.goodmem.common.status.StatusOr;
 import com.goodmem.db.util.UuidUtil;
 import com.google.protobuf.ByteString;
 import org.junit.jupiter.api.Test;

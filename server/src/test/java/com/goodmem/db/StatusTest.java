@@ -1,7 +1,8 @@
 package com.goodmem.db;
 
-import com.goodmem.db.util.Status;
-import com.goodmem.db.util.StatusOr;
+import com.goodmem.common.status.Status;
+import com.goodmem.common.status.StatusCode;
+import com.goodmem.common.status.StatusOr;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -16,19 +17,19 @@ public class StatusTest {
         Status ok = Status.ok();
         assertTrue(ok.isOk());
         assertFalse(ok.isError());
-        assertEquals(Status.Code.OK, ok.getCode());
+        assertEquals(StatusCode.OK, ok.getCode());
         
         Status notFound = Status.notFound("Item not found");
         assertFalse(notFound.isOk());
         assertTrue(notFound.isError());
-        assertEquals(Status.Code.NOT_FOUND, notFound.getCode());
+        assertEquals(StatusCode.NOT_FOUND, notFound.getCode());
         assertEquals("Item not found", notFound.getMessage());
         
         Exception exception = new RuntimeException("Test exception");
         Status internal = Status.internal("Internal error", exception);
         assertFalse(internal.isOk());
         assertTrue(internal.isError());
-        assertEquals(Status.Code.INTERNAL, internal.getCode());
+        assertEquals(StatusCode.INTERNAL, internal.getCode());
         assertEquals("Internal error", internal.getMessage());
         assertEquals(exception, internal.getCause());
     }
@@ -58,7 +59,7 @@ public class StatusTest {
         StatusOr<String> statusOr = StatusOr.ofException(exception);
         assertFalse(statusOr.isOk());
         assertTrue(statusOr.isNotOk());
-        assertEquals(Status.Code.INTERNAL, statusOr.getStatus().getCode());
+        assertEquals(StatusCode.INTERNAL, statusOr.getStatus().getCode());
         assertTrue(statusOr.getStatus().getMessage().contains("Test exception"));
         assertEquals(exception, statusOr.getStatus().getCause());
     }

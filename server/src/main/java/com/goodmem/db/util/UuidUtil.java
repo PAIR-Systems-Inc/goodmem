@@ -1,5 +1,8 @@
 package com.goodmem.db.util;
 
+import com.goodmem.common.status.Status;
+import com.goodmem.common.status.StatusOr;
+
 import javax.annotation.Nonnull;
 import java.nio.ByteBuffer;
 import java.util.UUID;

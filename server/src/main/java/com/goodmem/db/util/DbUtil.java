@@ -1,5 +1,7 @@
 package com.goodmem.db.util;
 
+import com.goodmem.common.status.Status;
+import com.goodmem.common.status.StatusOr;
 import com.google.protobuf.Timestamp;
 import com.google.protobuf.util.Timestamps;
 

@@ -1,11 +1,12 @@
-package com.goodmem.db.util;
+package com.goodmem.common.status;
 
 import javax.annotation.Nonnull;
 import java.util.Objects;
 
 /**
- * Represents the status of an operation.
- * This can be used to communicate errors or other status conditions.
+ * Represents the status of an operation, possibly with additional error details.
+ * This class is inspired by the gRPC Status concept and provides a unified way
+ * to represent success or various error conditions.
  */
 public class Status {
     private final StatusCode code;
@@ -73,6 +74,34 @@ public class Status {
     public static Status unimplemented(String message) {
         return new Status(StatusCode.UNIMPLEMENTED, message, null);
     }
+    
+    /**
+     * Creates a new UNAUTHENTICATED status with the given message.
+     */
+    public static Status unauthenticated(String message) {
+        return new Status(StatusCode.UNAUTHENTICATED, message, null);
+    }
+    
+    /**
+     * Creates a new PERMISSION_DENIED status with the given message.
+     */
+    public static Status permissionDenied(String message) {
+        return new Status(StatusCode.PERMISSION_DENIED, message, null);
+    }
+    
+    /**
+     * Creates a new RESOURCE_EXHAUSTED status with the given message.
+     */
+    public static Status resourceExhausted(String message) {
+        return new Status(StatusCode.RESOURCE_EXHAUSTED, message, null);
+    }
+    
+    /**
+     * Creates a new DEADLINE_EXCEEDED status with the given message.
+     */
+    public static Status deadlineExceeded(String message) {
+        return new Status(StatusCode.DEADLINE_EXCEEDED, message, null);
+    }
 
     /**
      * Returns the code for this status.
@@ -80,6 +109,13 @@ public class Status {
     @Nonnull
     public StatusCode getCode() {
         return code;
+    }
+
+    /**
+     * Returns the HTTP status code corresponding to this status.
+     */
+    public int getHttpCode() {
+        return code.getHttpCode();
     }
 
     /**
