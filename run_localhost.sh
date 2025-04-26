@@ -1,5 +1,33 @@
 #!/bin/bash
-
+#
+# run_localhost.sh - Local Development Environment Manager for GoodMem
+#
+# This script provides a streamlined way to manage the local development environment
+# for the GoodMem project using Docker Compose. It handles:
+#
+# - Starting the required services (PostgreSQL, MinIO, server, UI)
+# - Setting up environment variables from a shared configuration file
+# - Creating and mounting host directories for data persistence
+# - Providing flexible options for different development workflows
+#
+# The script supports several modes:
+# 1. Full stack mode (default): Runs all services in Docker
+# 2. IDE development mode (--exclude-server): Runs only dependencies,
+#    allowing you to run the server from your IDE/IntelliJ
+# 3. API-only mode (--exclude-ui): Runs everything except the UI
+#
+# Configuration is sourced from config/local_dev.env, which contains shared
+# settings used by both this script and the IntelliJ run configuration.
+#
+# USAGE:
+#   ./run_localhost.sh                 # Start all services
+#   ./run_localhost.sh --exclude-server # Start dependencies only (for IDE development)
+#   ./run_localhost.sh --exclude-ui    # Start without the UI container
+#   ./run_localhost.sh --help          # Show help message
+#
+# After changing the config/local_dev.env file, run ./config/update_intellij_config.sh
+# to update your IntelliJ run configuration with the new values.
+#
 # Exit immediately if a command exits with a non-zero status.
 set -e
 

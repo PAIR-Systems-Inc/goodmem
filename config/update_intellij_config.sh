@@ -1,8 +1,28 @@
 #!/bin/bash
-
-# This script updates the IntelliJ run configuration with environment variables from local_dev.env
-# Run this script after making changes to local_dev.env
-
+#
+# update_intellij_config.sh - IntelliJ Run Configuration Updater for GoodMem
+#
+# This script automatically updates the IntelliJ run configuration with
+# environment variables from the shared config/local_dev.env file. It ensures
+# that your IntelliJ configuration stays in sync with the Docker Compose
+# environment variables.
+#
+# The script:
+# - Reads configuration values from config/local_dev.env
+# - Generates or updates the .idea/runConfigurations/Main.xml file with proper environment variables
+# - Sets up the Java main class and other configuration parameters
+#
+# USAGE:
+#   ./config/update_intellij_config.sh
+#
+# NOTES:
+# - Run this script whenever you make changes to config/local_dev.env
+# - The script completely recreates the run configuration file
+# - IntelliJ will automatically detect the changes the next time you open the project
+#
+# This script works together with run_localhost.sh, which uses the same configuration
+# for Docker Compose services, ensuring a consistent development environment.
+#
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
