@@ -38,7 +38,7 @@ public class UsersTest {
     @Container
     private static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(
             DockerImageName.parse("pgvector/pgvector:pg16"))
-            .withDatabaseName("goodmem")
+            .withDatabaseName("goodmem_users_test")
             .withUsername("goodmem")
             .withPassword("goodmem")
             .withCopyFileToContainer(

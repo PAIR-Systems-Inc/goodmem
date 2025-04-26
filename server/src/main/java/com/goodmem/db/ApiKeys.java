@@ -166,6 +166,7 @@ public final class ApiKeys {
      */
     @Nonnull
     public static StatusOr<Integer> save(Connection conn, ApiKey apiKey) {
+        System.out.println("ApiKeys.save: Starting save operation for apiKey=" + apiKey.apiKeyId());
         String sql = """
                 INSERT INTO apikey
                        (api_key_id, user_id, key_prefix, key_hash, status, labels,
@@ -184,36 +185,63 @@ public final class ApiKeys {
                               updated_by_id = excluded.updated_by_id
                 """;
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            System.out.println("ApiKeys.save: Setting parameters:");
+            
+            System.out.println("  1. api_key_id = " + apiKey.apiKeyId());
             stmt.setObject(1, apiKey.apiKeyId());
+            
+            System.out.println("  2. user_id = " + apiKey.userId());
             stmt.setObject(2, apiKey.userId());
+            
+            System.out.println("  3. key_prefix = " + apiKey.keyPrefix());
             stmt.setString(3, apiKey.keyPrefix());
+            
+            System.out.println("  4. key_hash = " + apiKey.keyHash());
             stmt.setString(4, apiKey.keyHash());
+            
+            System.out.println("  5. status = " + apiKey.status());
             stmt.setString(5, apiKey.status());
             
             // Note: In a real implementation, this would use proper JSONB handling
-            // For example: stmt.setObject(6, apiKey.labels(), Types.OTHER);
+            System.out.println("  6. labels = (null placeholder)");
             stmt.setObject(6, null); // Placeholder for JSONB
             
             if (apiKey.expiresAt() != null) {
+                System.out.println("  7. expires_at = " + apiKey.expiresAt());
                 stmt.setTimestamp(7, DbUtil.toSqlTimestamp(apiKey.expiresAt()));
             } else {
+                System.out.println("  7. expires_at = NULL");
                 stmt.setNull(7, java.sql.Types.TIMESTAMP);
             }
             
             if (apiKey.lastUsedAt() != null) {
+                System.out.println("  8. last_used_at = " + apiKey.lastUsedAt());
                 stmt.setTimestamp(8, DbUtil.toSqlTimestamp(apiKey.lastUsedAt()));
             } else {
+                System.out.println("  8. last_used_at = NULL");
                 stmt.setNull(8, java.sql.Types.TIMESTAMP);
             }
             
+            System.out.println("  9. created_at = " + apiKey.createdAt());
             stmt.setTimestamp(9, DbUtil.toSqlTimestamp(apiKey.createdAt()));
+            
+            System.out.println("  10. updated_at = " + apiKey.updatedAt());
             stmt.setTimestamp(10, DbUtil.toSqlTimestamp(apiKey.updatedAt()));
+            
+            System.out.println("  11. created_by_id = " + apiKey.createdById());
             stmt.setObject(11, apiKey.createdById());
+            
+            System.out.println("  12. updated_by_id = " + apiKey.updatedById());
             stmt.setObject(12, apiKey.updatedById());
             
+            System.out.println("ApiKeys.save: Executing SQL statement...");
             int rowsAffected = stmt.executeUpdate();
+            System.out.println("ApiKeys.save: SQL executed, rowsAffected=" + rowsAffected);
+            
             return StatusOr.ofValue(rowsAffected);
         } catch (SQLException e) {
+            System.err.println("ApiKeys.save: SQL Exception: " + e.getMessage());
+            e.printStackTrace();
             return StatusOr.ofException(e);
         }
     }
@@ -228,17 +256,44 @@ public final class ApiKeys {
      */
     @Nonnull
     public static StatusOr<Integer> updateLastUsed(Connection conn, UUID apiKeyId, Instant lastUsedAt) {
+        System.out.println("ApiKeys.updateLastUsed: Starting update for apiKeyId=" + apiKeyId);
         String sql = """
                 UPDATE apikey
-                   SET last_used_at = ?
+                   SET last_used_at = ?,
+                       updated_at = now()
                  WHERE api_key_id = ?
                 """;
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            System.out.println("ApiKeys.updateLastUsed: Setting parameters:");
+            System.out.println("  1. last_used_at = " + lastUsedAt);
             stmt.setTimestamp(1, DbUtil.toSqlTimestamp(lastUsedAt));
+            
+            System.out.println("  2. api_key_id = " + apiKeyId);
             stmt.setObject(2, apiKeyId);
+            
+            System.out.println("ApiKeys.updateLastUsed: Executing SQL...");
             int rowsAffected = stmt.executeUpdate();
+            System.out.println("ApiKeys.updateLastUsed: SQL executed, rowsAffected=" + rowsAffected);
+            
+            // If no rows were affected, let's try to find out why
+            if (rowsAffected == 0) {
+                System.out.println("ApiKeys.updateLastUsed: No rows were affected, checking if API key exists...");
+                String checkSql = "SELECT COUNT(*) FROM apikey WHERE api_key_id = ?";
+                try (PreparedStatement checkStmt = conn.prepareStatement(checkSql)) {
+                    checkStmt.setObject(1, apiKeyId);
+                    try (var rs = checkStmt.executeQuery()) {
+                        if (rs.next()) {
+                            int count = rs.getInt(1);
+                            System.out.println("ApiKeys.updateLastUsed: Found " + count + " API keys with ID " + apiKeyId);
+                        }
+                    }
+                }
+            }
+            
             return StatusOr.ofValue(rowsAffected);
         } catch (SQLException e) {
+            System.err.println("ApiKeys.updateLastUsed: SQL Exception: " + e.getMessage());
+            e.printStackTrace();
             return StatusOr.ofException(e);
         }
     }
@@ -319,15 +374,17 @@ public final class ApiKeys {
         // StatusOr<Map<String, String>> labelsOr = DbUtil.parseJsonbToMap(rs, "labels");
         Map<String, String> labels = Map.of(); // Placeholder for JSONB
 
-        StatusOr<Instant> expiresAtOr = DbUtil.getOptionalInstant(rs, "expires_at");
+        StatusOr<Optional<Instant>> expiresAtOr = DbUtil.getOptionalInstant(rs, "expires_at");
         if (expiresAtOr.isNotOk()) {
             return StatusOr.ofStatus(expiresAtOr.getStatus());
         }
+        Instant expiresAt = expiresAtOr.getValue().orElse(null);
 
-        StatusOr<Instant> lastUsedAtOr = DbUtil.getOptionalInstant(rs, "last_used_at");
+        StatusOr<Optional<Instant>> lastUsedAtOr = DbUtil.getOptionalInstant(rs, "last_used_at");
         if (lastUsedAtOr.isNotOk()) {
             return StatusOr.ofStatus(lastUsedAtOr.getStatus());
         }
+        Instant lastUsedAt = lastUsedAtOr.getValue().orElse(null);
 
         StatusOr<Instant> createdAtOr = DbUtil.getInstant(rs, "created_at");
         if (createdAtOr.isNotOk()) {
@@ -356,8 +413,8 @@ public final class ApiKeys {
                 keyHash,
                 status,
                 labels,
-                expiresAtOr.getValue(),
-                lastUsedAtOr.getValue(),
+                expiresAt,
+                lastUsedAt,
                 createdAtOr.getValue(),
                 updatedAtOr.getValue(),
                 createdByIdOr.getValue(),

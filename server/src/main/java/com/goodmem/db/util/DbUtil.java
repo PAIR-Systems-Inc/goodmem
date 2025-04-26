@@ -11,6 +11,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -89,15 +90,15 @@ public final class DbUtil {
     }
 
     /**
-     * Gets an optional UUID from a ResultSet column, returning null if the column is null.
+     * Gets an optional UUID from a ResultSet column, returning Optional.empty() if the column is null.
      */
-    public static StatusOr<UUID> getOptionalUuid(ResultSet rs, String columnName) {
+    public static StatusOr<Optional<UUID>> getOptionalUuid(ResultSet rs, String columnName) {
         try {
             UUID uuid = rs.getObject(columnName, UUID.class);
             if (rs.wasNull() || uuid == null) {
-                return StatusOr.ofValue(null); // Returning null UUID for optional fields
+                return StatusOr.ofValue(Optional.empty()); // Empty Optional for null UUIDs
             }
-            return StatusOr.ofValue(uuid);
+            return StatusOr.ofValue(Optional.of(uuid));
         } catch (SQLException e) {
             return StatusOr.ofStatus(Status.internal("Failed to get UUID: " + e.getMessage(), e));
         }
@@ -120,15 +121,15 @@ public final class DbUtil {
     }
 
     /**
-     * Gets an optional Instant from a ResultSet column, returning null if the column is null.
+     * Gets an optional Instant from a ResultSet column, returning Optional.empty() if the column is null.
      */
-    public static StatusOr<Instant> getOptionalInstant(ResultSet rs, String columnName) {
+    public static StatusOr<Optional<Instant>> getOptionalInstant(ResultSet rs, String columnName) {
         try {
             java.sql.Timestamp timestamp = rs.getTimestamp(columnName);
             if (rs.wasNull() || timestamp == null) {
-                return StatusOr.ofValue(null); // Returning null Instant for optional fields
+                return StatusOr.ofValue(Optional.empty()); // Empty Optional for null timestamps
             }
-            return StatusOr.ofValue(timestamp.toInstant());
+            return StatusOr.ofValue(Optional.of(timestamp.toInstant()));
         } catch (SQLException e) {
             return StatusOr.ofStatus(Status.internal("Failed to get Instant: " + e.getMessage(), e));
         }
