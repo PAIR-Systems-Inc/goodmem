@@ -32,9 +32,39 @@ import static org.junit.jupiter.api.Assertions.*;
 public class DbTest {
 
     // Setup paths to the original schema files in the project
-    private static final String PROJECT_ROOT = "/home/amin/clients/wsl_pairsys/goodmem";
-    private static final String EXTENSIONS_SQL_PATH = PROJECT_ROOT + "/database/initdb/00-extensions.sql";
-    private static final String SCHEMA_SQL_PATH = PROJECT_ROOT + "/database/initdb/01-schema.sql";
+    private static final String EXTENSIONS_SQL_PATH = findResourcePath("00-extensions.sql");
+    private static final String SCHEMA_SQL_PATH = findResourcePath("01-schema.sql");
+    
+    /**
+     * Finds the path to a resource by trying multiple possible locations.
+     * This allows the tests to run from different working directories.
+     */
+    private static String findResourcePath(String filename) {
+        String[] possiblePaths = {
+            "database/initdb/" + filename,
+            "../database/initdb/" + filename,
+            "../../database/initdb/" + filename
+        };
+        
+        for (String path : possiblePaths) {
+            if (java.nio.file.Files.exists(java.nio.file.Path.of(path))) {
+                return path;
+            }
+        }
+        
+        // Fallback to absolute path - useful for development but should be avoided
+        String projectRoot = System.getProperty("user.dir");
+        if (projectRoot.endsWith("/server")) {
+            projectRoot = projectRoot.substring(0, projectRoot.length() - 7);
+        }
+        String absolutePath = projectRoot + "/database/initdb/" + filename;
+        
+        if (java.nio.file.Files.exists(java.nio.file.Path.of(absolutePath))) {
+            return absolutePath;
+        }
+        
+        throw new RuntimeException("Could not find SQL file: " + filename);
+    }
     
     /**
      * Use an official PostgreSQL image with pgvector extension.
