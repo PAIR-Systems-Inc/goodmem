@@ -144,6 +144,25 @@
 - **Generate proto for server**: `./gradlew :server:generateProto`
 - **Build CLI**: `./cli/build.sh` (uses Docker for reproducible builds)
 
+## Local Development Setup
+
+The project includes a streamlined development setup for local environment:
+
+- **Start all services**: `./run_localhost.sh`
+- **Start for IntelliJ development**: `./run_localhost.sh --exclude-server`
+- **Start without UI**: `./run_localhost.sh --exclude-ui`
+- **Get help on script options**: `./run_localhost.sh --help`
+
+### Configuration Management
+
+Configuration for the local development environment is managed through a unified approach:
+
+- **Configuration file**: `config/local_dev.env` contains the shared configuration values
+- **Update IntelliJ config**: `./config/update_intellij_config.sh` syncs IntelliJ run configurations with the shared config
+- **Environment variables**: The run_localhost.sh script sources variables from config/local_dev.env
+
+This approach ensures configuration stays in sync between Docker Compose and IntelliJ, with a single source of truth for all environment variables.
+
 ## Developer Tools
 The project includes several developer tools to streamline development workflows. When creating new scripts, always document them in this section and ensure they follow consistent patterns.
 

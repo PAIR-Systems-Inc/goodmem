@@ -38,8 +38,32 @@ The server starts two endpoints:
 
 #### Start with Docker Compose
 
+We provide a streamlined development setup using Docker Compose with a helper script:
+
 ```bash
-# Start all services (server, vector-db placeholder, and UI if available)
+# Start all services with default configuration
+./run_localhost.sh
+
+# For IntelliJ development, start only dependencies (DB, MinIO) without the server
+./run_localhost.sh --exclude-server
+
+# See all available options
+./run_localhost.sh --help
+```
+
+The configuration for local development is stored in `config/local_dev.env`. You can modify this file to customize your development environment.
+
+For IntelliJ users, we provide a tool to automatically update run configurations:
+
+```bash
+# After changing config/local_dev.env, update your IntelliJ config
+./config/update_intellij_config.sh
+```
+
+#### Docker Compose Manual Commands
+
+```bash
+# Start all services manually (not recommended, use run_localhost.sh instead)
 docker compose up -d
 
 # Verify server is running
