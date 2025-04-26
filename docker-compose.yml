@@ -8,29 +8,43 @@ services:
         PG_VERSION: 16 # Consider updating to 17 when stable
     container_name: goodmem-db
     environment:
-      POSTGRES_USER: goodmem_user
-      POSTGRES_PASSWORD: goodmem_password # Use secrets management in production!
-      POSTGRES_DB: goodmem_db
+      # Values provided by environment variables (e.g., from run_localhost.sh or .env file)
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # Mount host directory (path provided by env var) into container
+      - ${DATA_DIR_BASE}/pgdata:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U goodmem_user -d goodmem_db"]
+      # Use env var for user in healthcheck test
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  vector-db:
-    image: chromadb/chroma:latest
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z # Use specific stable release
+    container_name: goodmem-minio
+    command: server /data --console-address ":9001"
     ports:
-      - "8000:8000"
+      - "9000:9000" # API port
+      - "9001:9001" # Console UI port
+    environment:
+      # Values provided by environment variables
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     volumes:
-      - chroma-data:/chroma/chroma
+      # Mount host directory (path provided by env var) into container
+      - ${DATA_DIR_BASE}/minio_data:/data
     restart: unless-stopped
-    depends_on:
-      - db
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
 
   server:
     build:
@@ -42,13 +56,17 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      vector-db:
-        condition: service_started
+      minio: # Add dependency on minio
+        condition: service_healthy # Wait for minio healthcheck
     environment:
-      - VECTOR_DB_URL=http://vector-db:8000
-      - DB_URL=jdbc:postgresql://db:5432/goodmem_db
-      - DB_USER=goodmem_user
-      - DB_PASSWORD=goodmem_password
+      # Values provided by environment variables
+      - DB_URL=jdbc:postgresql://db:5432/${POSTGRES_DB} # Use DB name env var
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_BUCKET=${MINIO_BUCKET_NAME} # Renamed for clarity
     restart: unless-stopped
 
   ui:
@@ -63,6 +81,4 @@ services:
     depends_on:
       - server
 
-volumes:
-  pgdata:
-  chroma-data:
+# Note: Top-level 'volumes:' key is removed as we are using host mounts defined via env vars.
