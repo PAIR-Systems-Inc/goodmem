@@ -1,13 +1,9 @@
 package com.goodmem;
 
+import com.goodmem.operations.SystemInitOperation;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Timestamp;
-import com.goodmem.common.status.StatusOr;
-import com.goodmem.db.ApiKey;
-import com.goodmem.db.ApiKeys;
-import com.goodmem.db.User;
-import com.goodmem.db.Users;
-import com.goodmem.operations.SystemInitOperation;
+import com.zaxxer.hikari.HikariDataSource;
 import goodmem.v1.UserOuterClass.GetUserRequest;
 import goodmem.v1.UserOuterClass.InitializeSystemRequest;
 import goodmem.v1.UserOuterClass.InitializeSystemResponse;
@@ -16,15 +12,27 @@ import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import java.nio.ByteBuffer;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Logger;
 
+/**
+ * Implementation of the User service that provides user management functionality.
+ * <p>
+ * This service handles operations like retrieving user details and system initialization.
+ * It connects to the PostgreSQL database using the provided configuration and implements
+ * the gRPC service interface defined in the protocol buffer.
+ */
 public class UserServiceImpl extends UserServiceImplBase {
   private static final Logger logger = Logger.getLogger(UserServiceImpl.class.getName());
+  private final Config config;
+
+  public record Config(HikariDataSource dataSource) {}
+
+  public UserServiceImpl(Config config) {
+    this.config = config;
+  }
 
   @Override
   public void getUser(GetUserRequest request, StreamObserver<goodmem.v1.UserOuterClass.User> responseObserver) {
@@ -53,11 +61,8 @@ public class UserServiceImpl extends UserServiceImplBase {
   public void initializeSystem(InitializeSystemRequest request, StreamObserver<InitializeSystemResponse> responseObserver) {
     logger.info("Initializing system via gRPC");
     
-    // Set up database connection
-    try (Connection connection = DriverManager.getConnection(
-        System.getProperty("DB_URL", "jdbc:postgresql://localhost:5432/goodmem"),
-        System.getProperty("DB_USER", "goodmem"),
-        System.getProperty("DB_PASSWORD", "goodmem"))) {
+    // Set up database connection using the connection pool
+    try (Connection connection = config.dataSource().getConnection()) {
         
       // Create and execute the operation
       SystemInitOperation operation = new SystemInitOperation(connection);

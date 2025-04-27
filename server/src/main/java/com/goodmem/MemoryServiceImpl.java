@@ -1,8 +1,10 @@
 package com.goodmem;
 
+import com.goodmem.config.MinioConfig;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Empty;
 import com.google.protobuf.Timestamp;
+import com.zaxxer.hikari.HikariDataSource;
 import goodmem.v1.MemoryOuterClass.CreateMemoryRequest;
 import goodmem.v1.MemoryOuterClass.DeleteMemoryRequest;
 import goodmem.v1.MemoryOuterClass.GetMemoryRequest;
@@ -18,6 +20,13 @@ import java.util.logging.Logger;
 
 public class MemoryServiceImpl extends MemoryServiceImplBase {
   private static final Logger logger = Logger.getLogger(MemoryServiceImpl.class.getName());
+  private final Config config;
+  
+  public record Config(HikariDataSource dataSource, MinioConfig minioConfig) {}
+  
+  public MemoryServiceImpl(Config config) {
+    this.config = config;
+  }
 
   @Override
   public void createMemory(CreateMemoryRequest request, StreamObserver<Memory> responseObserver) {

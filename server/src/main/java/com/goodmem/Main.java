@@ -1,17 +1,24 @@
 package com.goodmem;
 
+import com.goodmem.common.status.Status;
+import com.goodmem.common.status.StatusOr;
+import com.goodmem.config.MinioConfig;
+import com.google.common.base.Strings;
+import com.google.common.io.BaseEncoding;
 import com.google.common.io.ByteSource;
 import com.google.common.io.Resources;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Timestamps;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import goodmem.v1.ApiKeyServiceGrpc;
+import goodmem.v1.Apikey;
 import goodmem.v1.Apikey.ApiKey;
 import goodmem.v1.Apikey.CreateApiKeyRequest;
 import goodmem.v1.Apikey.CreateApiKeyResponse;
 import goodmem.v1.Apikey.DeleteApiKeyRequest;
 import goodmem.v1.Apikey.ListApiKeysRequest;
 import goodmem.v1.Apikey.ListApiKeysResponse;
-import goodmem.v1.Apikey.Status;
 import goodmem.v1.Apikey.UpdateApiKeyRequest;
 import goodmem.v1.MemoryOuterClass.CreateMemoryRequest;
 import goodmem.v1.MemoryOuterClass.DeleteMemoryRequest;
@@ -38,19 +45,18 @@ import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.TlsServerCredentials.ClientAuth;
 import io.grpc.inprocess.InProcessChannelBuilder;
-import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import java.io.IOException;
-import java.net.URL;
+import java.sql.Connection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
+import org.tinylog.Logger;
 
 public class Main {
-  private static final Logger logger = Logger.getLogger(Main.class.getName());
+
   private static final int GRPC_PORT = 9090;
   private static final int REST_PORT = 8080;
 
@@ -59,6 +65,7 @@ public class Main {
   private final UserServiceImpl userServiceImpl;
   private final MemoryServiceImpl memoryServiceImpl;
   private final ApiKeyServiceImpl apiKeyServiceImpl;
+  private final HikariDataSource dataSource;
 
   // gRPC blocking stubs for the REST-to-gRPC bridge
   private final SpaceServiceGrpc.SpaceServiceBlockingStub spaceService;
@@ -66,12 +73,32 @@ public class Main {
   private final MemoryServiceGrpc.MemoryServiceBlockingStub memoryService;
   private final ApiKeyServiceGrpc.ApiKeyServiceBlockingStub apiKeyService;
 
+  private final MinioConfig minioConfig;
+
   public Main() {
-    // Create service implementations
-    this.spaceServiceImpl = new SpaceServiceImpl();
-    this.userServiceImpl = new UserServiceImpl();
-    this.memoryServiceImpl = new MemoryServiceImpl();
-    this.apiKeyServiceImpl = new ApiKeyServiceImpl();
+    // Initialize database connection pool
+    this.dataSource = setupDataSource();
+    
+    // Get MinIO configuration
+    minioConfig = new MinioConfig(
+        System.getProperty("MINIO_ENDPOINT"),
+        System.getProperty("MINIO_ACCESS_KEY"),
+        System.getProperty("MINIO_SECRET_KEY"),
+        System.getProperty("MINIO_BUCKET")
+    );
+    Logger.info("Configured MinIO.", minioConfig);
+
+    // Create service configs
+    var userServiceConfig = new UserServiceImpl.Config(dataSource);
+    
+    // Create service implementations with connection pool
+    this.spaceServiceImpl = new SpaceServiceImpl(new SpaceServiceImpl.Config(
+        dataSource, "openai-ada-002")); // Default embedding model
+    this.userServiceImpl = new UserServiceImpl(userServiceConfig);
+    this.memoryServiceImpl = new MemoryServiceImpl(
+        new MemoryServiceImpl.Config(dataSource, minioConfig));
+    this.apiKeyServiceImpl = new ApiKeyServiceImpl(
+        new ApiKeyServiceImpl.Config(dataSource));
 
     // Create an in-process channel for REST-to-gRPC communication
     ManagedChannel channel = InProcessChannelBuilder.forName("in-process").build();
@@ -83,10 +110,40 @@ public class Main {
     this.apiKeyService = ApiKeyServiceGrpc.newBlockingStub(channel);
   }
 
-  public void startGrpcServer() throws IOException {
+  /**
+   * TODO: fill this in
+   * @return
+   */
+  private HikariDataSource setupDataSource() {
+    // Get database configuration from environment properties
+    String dbUrl = System.getProperty("DB_URL");
+    String dbUser = System.getProperty("DB_USER");
+    String dbPassword = System.getProperty("DB_PASSWORD");
+    
+    // Configure HikariCP
+    HikariConfig config = new HikariConfig();
+    config.setJdbcUrl(dbUrl);
+    config.setUsername(dbUser);
+    config.setPassword(dbPassword);
+    config.setMaximumPoolSize(10);
+    config.setMinimumIdle(2);
+    config.setIdleTimeout(30000);
+    config.setMaxLifetime(1800000);
+    config.setConnectionTimeout(30000);
+    config.setAutoCommit(true);
+    config.setPoolName("GoodMemPool");
+    config.addDataSourceProperty("cachePrepStmts", "true");
+    config.addDataSourceProperty("prepStmtCacheSize", "250");
+    config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+
+    Logger.info("Initializing database connection pool with URL: {}", dbUrl);
+    return new HikariDataSource(config);
+  }
+
+  public Status startGrpcServer() throws IOException {
     // Create special interceptor for the initializeSystem method (no auth required)
     var initMethodAuthorizer = new MethodAuthorizer()
-        .allowMethod("goodmem.v1.UserService/InitializeSystem");
+            .allowMethod("goodmem.v1.UserService/InitializeSystem");
 
     // Load certificate and key files from resources using absolute paths
     var serverCrt = Main.class.getResource("/certs/server.crt");
@@ -109,9 +166,9 @@ public class Main {
         .build();
         
     // Log certificate information
-    logger.info("TLS enabled for gRPC server with:");
-    logger.info(" - Certificate: " + serverCrt);
-    logger.info(" - Private key: " + serverKey);
+    Logger.info(
+        "TLS enabled for gRPC server with: Certificate {}, Private key {}",
+        serverCrt, serverKey);
 
     grpcServer =
         Grpc.newServerBuilderForPort(GRPC_PORT, credentials)
@@ -123,24 +180,36 @@ public class Main {
             .addService(ProtoReflectionServiceV1.newInstance())
             .build()
             .start();
-    logger.info("gRPC Server started, listening on port " + GRPC_PORT);
+    Logger.info("gRPC Server started, listening on port {}", GRPC_PORT);
 
     Runtime.getRuntime()
         .addShutdownHook(
             new Thread(
                 () -> {
-                  logger.info("Shutting down gRPC server since JVM is shutting down");
+                  Logger.info("Shutting down server since JVM is shutting down");
                   try {
                     Main.this.stopGrpcServer();
+                    Main.this.shutdown();
                   } catch (InterruptedException e) {
-                    logger.severe("Server shutdown interrupted: " + e.getMessage());
+                    Logger.error(e, "Server shutdown interrupted.");
+                  } catch (Exception e) {
+                    Logger.error(e, "Error during shutdown.");
                   }
                 }));
+    return Status.ok();
   }
 
   private void stopGrpcServer() throws InterruptedException {
     if (grpcServer != null) {
       grpcServer.shutdown().awaitTermination(30, TimeUnit.SECONDS);
+    }
+  }
+  
+  private void shutdown() {
+    // Shut down HikariCP connection pool
+    if (dataSource != null && !dataSource.isClosed()) {
+      Logger.info("Shutting down database connection pool");
+      dataSource.close();
     }
   }
 
@@ -180,13 +249,13 @@ public class Main {
     app.put("/v1/apikeys/{id}", this::handleUpdateApiKey);
     app.delete("/v1/apikeys/{id}", this::handleDeleteApiKey);
 
-    logger.info("REST server started, listening on port " + REST_PORT);
+    Logger.info("REST server started, listening on port {}.", REST_PORT);
   }
 
   // Space handlers
   private void handleCreateSpace(Context ctx) {
     String apiKey = ctx.header("x-api-key");
-    logger.info("REST CreateSpace request with API key: " + apiKey);
+    Logger.info("REST CreateSpace request with API key: {}.", apiKey);
 
     CreateSpaceRequest.Builder requestBuilder = CreateSpaceRequest.newBuilder();
     Map<String, Object> json = ctx.bodyAsClass(Map.class);
@@ -213,21 +282,31 @@ public class Main {
     ctx.json(protoToMap(response));
   }
 
+  /**
+   * TODO: fill this in
+   * @param ctx
+   */
   private void handleGetSpace(Context ctx) {
     String spaceIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    logger.info("REST GetSpace request for ID: " + spaceIdHex + " with API key: " + apiKey);
+    Logger.info(
+        "REST GetSpace request for ID: {} with API key: {}", spaceIdHex, apiKey);
 
-    ByteString spaceId = convertHexToUuidBytes(spaceIdHex);
-    GetSpaceRequest request = GetSpaceRequest.newBuilder().setSpaceId(spaceId).build();
+    StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
+    if (spaceIdOr.isOk()) {
+      GetSpaceRequest request = GetSpaceRequest
+          .newBuilder()
+          .setSpaceId(spaceIdOr.getValue())
+          .build();
 
-    Space response = spaceService.getSpace(request);
-    ctx.json(protoToMap(response));
+      Space response = spaceService.getSpace(request);
+      ctx.json(protoToMap(response));
+    }
   }
 
   private void handleListSpaces(Context ctx) {
     String apiKey = ctx.header("x-api-key");
-    logger.info("REST ListSpaces request with API key: " + apiKey);
+    Logger.info("REST ListSpaces request with API key: {}", apiKey);
 
     ListSpacesRequest.Builder requestBuilder = ListSpacesRequest.newBuilder();
 
@@ -237,27 +316,39 @@ public class Main {
             (key, values) -> {
               if (key.startsWith("label.") && !values.isEmpty()) {
                 String labelKey = key.substring("label.".length());
-                requestBuilder.putLabelSelectors(labelKey, values.get(0));
+                requestBuilder.putLabelSelectors(labelKey, values.getFirst());
               }
             });
 
     // Handle owner_id filter if provided
     if (ctx.queryParam("owner_id") != null) {
-      ByteString ownerId = convertHexToUuidBytes(ctx.queryParam("owner_id"));
-      requestBuilder.setOwnerId(ownerId);
+      StatusOr<ByteString> ownerIdOr =
+          convertHexToUuidBytes(ctx.queryParam("owner_id"));
+      if (ownerIdOr.isOk()) {
+        requestBuilder.setOwnerId(ownerIdOr.getValue());
+      }
     }
 
     ListSpacesResponse response = spaceService.listSpaces(requestBuilder.build());
     ctx.json(Map.of("spaces", response.getSpacesList().stream().map(this::protoToMap).toList()));
   }
 
+  /**
+   * // TODO: fill this in
+   * @param ctx
+   */
   private void handleUpdateSpace(Context ctx) {
     String spaceIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    logger.info("REST UpdateSpace request for ID: " + spaceIdHex + " with API key: " + apiKey);
+    Logger.info("REST UpdateSpace request for ID: {} with API key: {}",
+        spaceIdHex, apiKey);
 
-    ByteString spaceId = convertHexToUuidBytes(spaceIdHex);
-    UpdateSpaceRequest.Builder requestBuilder = UpdateSpaceRequest.newBuilder().setSpaceId(spaceId);
+    StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
+    if (spaceIdOr.isNotOk()) {
+      return;
+    }
+    UpdateSpaceRequest.Builder requestBuilder =
+        UpdateSpaceRequest.newBuilder().setSpaceId(spaceIdOr.getValue());
 
     Map<String, Object> json = ctx.bodyAsClass(Map.class);
 
@@ -279,15 +370,23 @@ public class Main {
     ctx.json(protoToMap(response));
   }
 
+  /**
+   * TODO: fill this in
+   * @param ctx
+   */
   private void handleDeleteSpace(Context ctx) {
     String spaceIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    logger.info("REST DeleteSpace request for ID: " + spaceIdHex + " with API key: " + apiKey);
+    Logger.info(
+        "REST DeleteSpace request for ID: {} with API key: {}", spaceIdHex, apiKey);
 
-    ByteString spaceId = convertHexToUuidBytes(spaceIdHex);
-    DeleteSpaceRequest request = DeleteSpaceRequest.newBuilder().setSpaceId(spaceId).build();
-
-    spaceService.deleteSpace(request);
+    StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
+    if (spaceIdOr.isNotOk()) {
+      return;
+    }
+    spaceService.deleteSpace(
+        DeleteSpaceRequest.newBuilder().setSpaceId(spaceIdOr.getValue()).build()
+    );
     ctx.status(204);
   }
 
@@ -295,26 +394,40 @@ public class Main {
   private void handleGetUser(Context ctx) {
     String userIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    logger.info("REST GetUser request for ID: " + userIdHex + " with API key: " + apiKey);
+    Logger.info(
+        "REST GetUser request for ID: {} with API key: {}", userIdHex, apiKey);
 
-    ByteString userId = convertHexToUuidBytes(userIdHex);
-    GetUserRequest request = GetUserRequest.newBuilder().setUserId(userId).build();
+    StatusOr<ByteString> userIdOr = convertHexToUuidBytes(userIdHex);
+    if (userIdOr.isNotOk()) {
+      return;
+    }
 
-    User response = userService.getUser(request);
+    User response = userService.getUser(
+        GetUserRequest.newBuilder().setUserId(userIdOr.getValue()).build());
     ctx.json(protoToMap(response));
   }
 
   // Memory handlers
+
+  /**
+   * TODO: fill this in
+   * @param ctx
+   */
   private void handleCreateMemory(Context ctx) {
     String apiKey = ctx.header("x-api-key");
-    logger.info("REST CreateMemory request with API key: " + apiKey);
+    Logger.info("REST CreateMemory request with API key: {}", apiKey);
 
     CreateMemoryRequest.Builder requestBuilder = CreateMemoryRequest.newBuilder();
     Map<String, Object> json = ctx.bodyAsClass(Map.class);
 
     if (json.containsKey("space_id")) {
-      ByteString spaceId = convertHexToUuidBytes((String) json.get("space_id"));
-      requestBuilder.setSpaceId(spaceId);
+      StatusOr<ByteString> spaceIdOr =
+          convertHexToUuidBytes((String) json.get("space_id"));
+      if (spaceIdOr.isNotOk()) {
+        // TODO: create a helper method that sets an HTTP error code appropriately, and also an error message, and returns that. Look for any other mid-method returns in handleXXX methods and fix those too.
+        return;
+      }
+      requestBuilder.setSpaceId(spaceIdOr.getValue());
     }
 
     if (json.containsKey("original_content_ref")) {
@@ -335,48 +448,77 @@ public class Main {
     ctx.json(protoToMap(response));
   }
 
+  /**
+   * TODO: document this
+   * @param ctx
+   */
   private void handleGetMemory(Context ctx) {
     String memoryIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    logger.info("REST GetMemory request for ID: " + memoryIdHex + " with API key: " + apiKey);
+    Logger.info("REST GetMemory request for ID: {} with API key: {}",
+        memoryIdHex, apiKey);
 
-    ByteString memoryId = convertHexToUuidBytes(memoryIdHex);
-    GetMemoryRequest request = GetMemoryRequest.newBuilder().setMemoryId(memoryId).build();
+    StatusOr<ByteString> memoryIdOr = convertHexToUuidBytes(memoryIdHex);
+    if (memoryIdOr.isNotOk()) {
+      return;
+    }
 
-    Memory response = memoryService.getMemory(request);
+    Memory response = memoryService.getMemory(
+        GetMemoryRequest.newBuilder().setMemoryId(memoryIdOr.getValue()).build()
+    );
     ctx.json(protoToMap(response));
   }
 
+  /**
+   * TODO: document this
+   * @param ctx
+   */
   private void handleListMemories(Context ctx) {
     String spaceIdHex = ctx.pathParam("spaceId");
     String apiKey = ctx.header("x-api-key");
-    logger.info(
+    Logger.info(
         "REST ListMemories request for space ID: " + spaceIdHex + " with API key: " + apiKey);
 
-    ByteString spaceId = convertHexToUuidBytes(spaceIdHex);
-    ListMemoriesRequest request = ListMemoriesRequest.newBuilder().setSpaceId(spaceId).build();
+    StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
+    if (spaceIdOr.isNotOk()) {
+      return;
+    }
 
-    ListMemoriesResponse response = memoryService.listMemories(request);
+    ListMemoriesResponse response = memoryService.listMemories(
+        ListMemoriesRequest.newBuilder().setSpaceId(spaceIdOr.getValue()).build());
     ctx.json(
         Map.of("memories", response.getMemoriesList().stream().map(this::protoToMap).toList()));
   }
 
+  /**
+   * TODO: document this
+   * @param ctx
+   */
   private void handleDeleteMemory(Context ctx) {
     String memoryIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    logger.info("REST DeleteMemory request for ID: " + memoryIdHex + " with API key: " + apiKey);
+    Logger.info("REST DeleteMemory request for ID: {} with API key: {}", memoryIdHex, apiKey);
 
-    ByteString memoryId = convertHexToUuidBytes(memoryIdHex);
-    DeleteMemoryRequest request = DeleteMemoryRequest.newBuilder().setMemoryId(memoryId).build();
-
-    memoryService.deleteMemory(request);
+    StatusOr<ByteString> memoryIdOr = convertHexToUuidBytes(memoryIdHex);
+    if (memoryIdOr.isNotOk()) {
+      return;
+    }
+    memoryService.deleteMemory(
+        DeleteMemoryRequest
+            .newBuilder()
+            .setMemoryId(memoryIdOr.getValue())
+            .build());
     ctx.status(204);
   }
 
   // API Key handlers
+  /**
+   * TODO: document this
+   * @param ctx
+   */
   private void handleCreateApiKey(Context ctx) {
     String apiKey = ctx.header("x-api-key");
-    logger.info("REST CreateApiKey request with API key: " + apiKey);
+    Logger.info("REST CreateApiKey request with API key: {}", apiKey);
 
     CreateApiKeyRequest.Builder requestBuilder = CreateApiKeyRequest.newBuilder();
     Map<String, Object> json = ctx.bodyAsClass(Map.class);
@@ -396,9 +538,13 @@ public class Main {
     ctx.json(responseMap);
   }
 
+  /**
+   * TODO: document this
+   * @param ctx
+   */
   private void handleListApiKeys(Context ctx) {
     String apiKey = ctx.header("x-api-key");
-    logger.info("REST ListApiKeys request with API key: " + apiKey);
+    Logger.info("REST ListApiKeys request with API key: {}", apiKey);
 
     ListApiKeysRequest request = ListApiKeysRequest.newBuilder().build();
 
@@ -406,14 +552,22 @@ public class Main {
     ctx.json(Map.of("keys", response.getKeysList().stream().map(this::protoToMap).toList()));
   }
 
+  /**
+   * TODO: document this
+   * @param ctx
+   */
   private void handleUpdateApiKey(Context ctx) {
     String apiKeyIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    logger.info("REST UpdateApiKey request for ID: " + apiKeyIdHex + " with API key: " + apiKey);
+    Logger.info(
+        "REST UpdateApiKey request for ID: {} with API key: {}", apiKeyIdHex, apiKey);
 
-    ByteString apiKeyId = convertHexToUuidBytes(apiKeyIdHex);
+    StatusOr<ByteString> apiKeyIdOr = convertHexToUuidBytes(apiKeyIdHex);
+    if (apiKeyIdOr.isNotOk()) {
+      return;
+    }
     UpdateApiKeyRequest.Builder requestBuilder =
-        UpdateApiKeyRequest.newBuilder().setApiKeyId(apiKeyId);
+        UpdateApiKeyRequest.newBuilder().setApiKeyId(apiKeyIdOr.getValue());
 
     Map<String, Object> json = ctx.bodyAsClass(Map.class);
 
@@ -425,16 +579,16 @@ public class Main {
 
     if (json.containsKey("status")) {
       String statusStr = (String) json.get("status");
-      Status status;
+      Apikey.Status status;
       switch (statusStr.toUpperCase()) {
         case "ACTIVE":
-          status = Status.ACTIVE;
+          status = Apikey.Status.ACTIVE;
           break;
         case "INACTIVE":
-          status = Status.INACTIVE;
+          status = Apikey.Status.INACTIVE;
           break;
         default:
-          status = Status.STATUS_UNSPECIFIED;
+          status = Apikey.Status.STATUS_UNSPECIFIED;
           break;
       }
       requestBuilder.setStatus(status);
@@ -444,15 +598,21 @@ public class Main {
     ctx.json(protoToMap(response));
   }
 
+  /**
+   * TODO: document this
+   * @param ctx
+   */
   private void handleDeleteApiKey(Context ctx) {
     String apiKeyIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    logger.info("REST DeleteApiKey request for ID: " + apiKeyIdHex + " with API key: " + apiKey);
+    Logger.info("REST DeleteApiKey request for ID: {} with API key: {}", apiKeyIdHex, apiKey);
 
-    ByteString apiKeyId = convertHexToUuidBytes(apiKeyIdHex);
-    DeleteApiKeyRequest request = DeleteApiKeyRequest.newBuilder().setApiKeyId(apiKeyId).build();
-
-    apiKeyService.deleteApiKey(request);
+    StatusOr<ByteString> apiKeyIdOr = convertHexToUuidBytes(apiKeyIdHex);
+    if (apiKeyIdOr.isNotOk()) {
+      return;
+    }
+    apiKeyService.deleteApiKey(
+        DeleteApiKeyRequest.newBuilder().setApiKeyId(apiKeyIdOr.getValue()).build());
     ctx.status(204);
   }
 
@@ -522,27 +682,21 @@ public class Main {
   }
 
   // Utility methods for converting between UUID formats
-  private ByteString convertHexToUuidBytes(String hexString) {
+  private static final ByteString ZEROS_BYTESTRING = ByteString.copyFrom(new byte[16]);
+  private StatusOr<ByteString> convertHexToUuidBytes(String hexString) {
+    if (Strings.isNullOrEmpty(hexString)) {
+      return StatusOr.ofValue(ZEROS_BYTESTRING);
+    }
     try {
       // Remove any hyphens or prefixes
       String cleanHex = hexString.replace("-", "").replace("0x", "");
-
-      // Check if we have a valid hex string of the right length
-      if (cleanHex.length() != 32) {
-        throw new IllegalArgumentException("Invalid UUID hex string: " + hexString);
+      byte[] bytes = BaseEncoding.base16().decode(cleanHex);
+      if (bytes.length != 16) {
+        return StatusOr.ofStatus(Status.invalidArgument("Invalid string detected."));
       }
-
-      // Convert hex to byte array
-      byte[] bytes = new byte[16];
-      for (int i = 0; i < 16; i++) {
-        int j = i * 2;
-        bytes[i] = (byte) Integer.parseInt(cleanHex.substring(j, j + 2), 16);
-      }
-
-      return ByteString.copyFrom(bytes);
-    } catch (Exception e) {
-      logger.warning("Failed to convert hex to UUID bytes: " + e.getMessage());
-      return ByteString.copyFrom(new byte[16]); // Return zeros in case of error
+      return StatusOr.ofValue(ByteString.copyFrom(bytes));
+    } catch (IllegalArgumentException e) {
+      return StatusOr.ofStatus(Status.invalidArgument("Invalid string detected."));
     }
   }
 
@@ -580,34 +734,30 @@ public class Main {
    * exist, it creates the root user and an API key.
    */
   private void handleSystemInit(Context ctx) {
-    logger.info("REST SystemInit request");
+    Logger.info("REST SystemInit request");
 
-    // Set up database connection
-    try (var connection =
-        java.sql.DriverManager.getConnection(
-            System.getProperty("DB_URL", "jdbc:postgresql://localhost:5432/goodmem"),
-            System.getProperty("DB_USER", "goodmem"),
-            System.getProperty("DB_PASSWORD", "goodmem"))) {
+    // Set up database connection from connection pool
+    try (Connection connection = dataSource.getConnection()) {
 
       // Create and execute the operation
       var operation = new com.goodmem.operations.SystemInitOperation(connection);
       var result = operation.execute();
 
       if (!result.isSuccess()) {
-        logger.severe("System initialization failed: " + result.getErrorMessage());
+        Logger.error("System initialization failed: {}", result.getErrorMessage());
         ctx.status(500).json(Map.of("error", result.getErrorMessage()));
         return;
       }
 
       if (result.isAlreadyInitialized()) {
-        logger.info("System is already initialized");
+        Logger.info("System is already initialized");
         ctx.status(200)
             .json(Map.of("initialized", true, "message", "System is already initialized"));
         return;
       }
 
       // Return the successful initialization with the API key
-      logger.info("System initialized successfully");
+      Logger.info("System initialized successfully");
       ctx.status(200)
           .json(
               Map.of(
@@ -617,8 +767,7 @@ public class Main {
                   "user_id", result.getUserId().toString()));
 
     } catch (Exception e) {
-      logger.severe("Error during system initialization: " + e.getMessage());
-      e.printStackTrace();
+      Logger.error(e, "Error during system initialization.");
       ctx.status(500).json(Map.of("error", "Internal server error: " + e.getMessage()));
     }
   }

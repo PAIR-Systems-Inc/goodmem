@@ -31,9 +31,12 @@ dependencies {
     
     // Logging
     implementation("org.slf4j:slf4j-simple:2.0.17")
+    implementation("org.tinylog:tinylog-api:2.7.0")
+    implementation("org.tinylog:tinylog-impl:2.7.0")
     
     // Database
     implementation("org.postgresql:postgresql:42.7.3")
+    implementation("com.zaxxer:HikariCP:5.1.0") // Connection pooling
     implementation("com.google.guava:guava:33.0.0-jre")
     
     // Testing

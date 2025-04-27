@@ -1,8 +1,10 @@
 package com.goodmem;
 
+import com.google.common.io.BaseEncoding;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Empty;
 import com.google.protobuf.Timestamp;
+import com.zaxxer.hikari.HikariDataSource;
 import goodmem.v1.SpaceOuterClass.CreateSpaceRequest;
 import goodmem.v1.SpaceOuterClass.DeleteSpaceRequest;
 import goodmem.v1.SpaceOuterClass.GetSpaceRequest;
@@ -19,6 +21,17 @@ import java.util.logging.Logger;
 
 public class SpaceServiceImpl extends SpaceServiceImplBase {
   private static final Logger logger = Logger.getLogger(SpaceServiceImpl.class.getName());
+  private final Config config;
+
+  /**
+   * @param dataSource
+   * @param defaultEmbeddingModel
+   */
+  public record Config(HikariDataSource dataSource, String defaultEmbeddingModel) {}
+  
+  public SpaceServiceImpl(Config config) {
+    this.config = config;
+  }
 
   @Override
   public void createSpace(CreateSpaceRequest request, StreamObserver<Space> responseObserver) {
@@ -37,7 +50,7 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
             .putAllLabels(request.getLabelsMap())
             .setEmbeddingModel(
                 request.getEmbeddingModel().isEmpty()
-                    ? "openai-ada-002"
+                    ? config.defaultEmbeddingModel()
                     : request.getEmbeddingModel())
             .setCreatedAt(getCurrentTimestamp())
             .setUpdatedAt(getCurrentTimestamp())
@@ -56,7 +69,7 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
 
   @Override
   public void getSpace(GetSpaceRequest request, StreamObserver<Space> responseObserver) {
-    logger.info("Getting space: " + bytesToHex(request.getSpaceId().toByteArray()));
+    logger.info("Getting space: " + BaseEncoding.base16().encode(request.getSpaceId().toByteArray()));
 
     // TODO: Validate space ID
     // TODO: Retrieve from database
@@ -84,7 +97,7 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
 
   @Override
   public void deleteSpace(DeleteSpaceRequest request, StreamObserver<Empty> responseObserver) {
-    logger.info("Deleting space: " + bytesToHex(request.getSpaceId().toByteArray()));
+    logger.info("Deleting space: " + BaseEncoding.base16().encode(request.getSpaceId().toByteArray()));
 
     // TODO: Validate space ID
     // TODO: Check ownership
@@ -128,7 +141,7 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
 
   @Override
   public void updateSpace(UpdateSpaceRequest request, StreamObserver<Space> responseObserver) {
-    logger.info("Updating space: " + bytesToHex(request.getSpaceId().toByteArray()));
+    logger.info("Updating space: " + BaseEncoding.base16().encode(request.getSpaceId().toByteArray()));
 
     // TODO: Validate space ID
     // TODO: Check ownership
@@ -163,17 +176,5 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
     bb.putLong(uuid.getMostSignificantBits());
     bb.putLong(uuid.getLeastSignificantBits());
     return ByteString.copyFrom(bb.array());
-  }
-
-  private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
-
-  private String bytesToHex(byte[] bytes) {
-    char[] hexChars = new char[bytes.length * 2];
-    for (int j = 0; j < bytes.length; j++) {
-      int v = bytes[j] & 0xFF;
-      hexChars[j * 2] = HEX_ARRAY[v >>> 4];
-      hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
-    }
-    return new String(hexChars);
   }
 }

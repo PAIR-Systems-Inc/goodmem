@@ -1,8 +1,10 @@
 package com.goodmem;
 
+import com.google.common.io.BaseEncoding;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Empty;
 import com.google.protobuf.Timestamp;
+import com.zaxxer.hikari.HikariDataSource;
 import goodmem.v1.ApiKeyServiceGrpc.ApiKeyServiceImplBase;
 import goodmem.v1.Apikey.ApiKey;
 import goodmem.v1.Apikey.CreateApiKeyRequest;
@@ -20,6 +22,13 @@ import java.util.logging.Logger;
 
 public class ApiKeyServiceImpl extends ApiKeyServiceImplBase {
   private static final Logger logger = Logger.getLogger(ApiKeyServiceImpl.class.getName());
+  private final Config config;
+  
+  public record Config(HikariDataSource dataSource) {}
+  
+  public ApiKeyServiceImpl(Config config) {
+    this.config = config;
+  }
 
   @Override
   public void createApiKey(
@@ -92,7 +101,7 @@ public class ApiKeyServiceImpl extends ApiKeyServiceImplBase {
 
   @Override
   public void updateApiKey(UpdateApiKeyRequest request, StreamObserver<ApiKey> responseObserver) {
-    logger.info("Updating API key: " + bytesToHex(request.getApiKeyId().toByteArray()));
+    logger.info("Updating API key: " + hex(request.getApiKeyId()));
 
     // TODO: Validate API key ID
     // TODO: Check permissions
@@ -118,7 +127,8 @@ public class ApiKeyServiceImpl extends ApiKeyServiceImplBase {
 
   @Override
   public void deleteApiKey(DeleteApiKeyRequest request, StreamObserver<Empty> responseObserver) {
-    logger.info("Deleting API key: " + bytesToHex(request.getApiKeyId().toByteArray()));
+    logger.info("Deleting API key: " + hex(request.getApiKeyId()));
+
 
     // TODO: Validate API key ID
     // TODO: Check permissions
@@ -140,15 +150,7 @@ public class ApiKeyServiceImpl extends ApiKeyServiceImplBase {
     return ByteString.copyFrom(bb.array());
   }
 
-  private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
-
-  private String bytesToHex(byte[] bytes) {
-    char[] hexChars = new char[bytes.length * 2];
-    for (int j = 0; j < bytes.length; j++) {
-      int v = bytes[j] & 0xFF;
-      hexChars[j * 2] = HEX_ARRAY[v >>> 4];
-      hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
-    }
-    return new String(hexChars);
+  private String hex(ByteString bs) {
+    return BaseEncoding.base16().encode(bs.toByteArray());
   }
 }
