@@ -1,26 +1,21 @@
 package cmd
 
 import (
-	"bytes"
+	"context"
+	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/bufbuild/connect-go"
+	"github.com/pairsys/goodmem/cli/gen/goodmem/v1"
+	"github.com/pairsys/goodmem/cli/gen/goodmem/v1/v1connect"
 	"github.com/spf13/cobra"
 )
-
-// InitCommand response from the server
-type InitResponse struct {
-	Initialized bool   `json:"initialized"`
-	Message     string `json:"message"`
-	RootApiKey  string `json:"root_api_key,omitempty"`
-	UserId      string `json:"user_id,omitempty"`
-	Error       string `json:"error,omitempty"`
-}
 
 // ConfigFile structure
 type ConfigFile struct {
@@ -36,6 +31,7 @@ var (
 	saveConfig    bool
 	forceInit     bool
 	configDir     string
+	insecure      bool
 	// serverAddress is defined in space.go and shared across commands
 )
 
@@ -97,53 +93,75 @@ The init command will:
 			}
 		}
 
-		// Make the init request to the server
-		endpoint := fmt.Sprintf("%s/v1/system/init", serverAddress)
-		resp, err := http.Post(endpoint, "application/json", bytes.NewBuffer([]byte("{}")))
+		// Make the init request to the server using gRPC
+		fmt.Printf("Connecting to gRPC API at %s\n", serverAddress)
+		
+		// Create the gRPC client with TLS configuration
+		// For development with self-signed certificates, we need to skip certificate verification
+		transport := &http.Transport{}
+		
+		// If insecure flag is set or the server uses https, configure TLS
+		if insecure || (len(serverAddress) >= 5 && serverAddress[:5] == "https") {
+			fmt.Println("Using TLS with certificate verification disabled (insecure mode)")
+			transport.TLSClientConfig = &tls.Config{
+				InsecureSkipVerify: true, // For development only - allows self-signed certificates
+			}
+		}
+		
+		httpClient := http.Client{
+			Timeout: 30 * time.Second,
+			Transport: transport,
+		}
+		
+		// Create user service client with gRPC protocol
+		userClient := v1connect.NewUserServiceClient(
+			&httpClient, 
+			serverAddress, 
+			connect.WithGRPC(),
+		)
+		
+		// Create the initialization request
+		req := connect.NewRequest(&v1.InitializeSystemRequest{})
+		
+		// Execute the request
+		resp, err := userClient.InitializeSystem(context.Background(), req)
 		if err != nil {
+			if connectErr, ok := err.(*connect.Error); ok {
+				return fmt.Errorf("gRPC error: %s - %s", connectErr.Code(), connectErr.Message())
+			}
 			return fmt.Errorf("error connecting to server: %w", err)
-		}
-		defer resp.Body.Close()
-
-		// Read the response body
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("error reading response: %w", err)
-		}
-
-		// Parse the response
-		var initResponse InitResponse
-		if err := json.Unmarshal(body, &initResponse); err != nil {
-			return fmt.Errorf("error parsing response: %w", err)
-		}
-
-		// Check for error in response
-		if initResponse.Error != "" {
-			return fmt.Errorf("server error: %s", initResponse.Error)
 		}
 
 		// Print the initialization status
-		fmt.Println(initResponse.Message)
+		fmt.Println(resp.Msg.Message)
 
 		// If already initialized on server side
-		if initResponse.Initialized && initResponse.RootApiKey == "" {
+		if resp.Msg.AlreadyInitialized && resp.Msg.RootApiKey == "" {
 			fmt.Println("The server is already initialized, but no API key was returned.")
 			fmt.Println("If you need a new API key, use the 'apikey create' command with existing credentials.")
 			return nil
 		}
 
 		// If initialization was successful and we got an API key
-		if initResponse.RootApiKey != "" {
-			fmt.Printf("Root API key: %s\n", initResponse.RootApiKey)
-			fmt.Printf("User ID: %s\n", initResponse.UserId)
+		if resp.Msg.RootApiKey != "" {
+			fmt.Printf("Root API key: %s\n", resp.Msg.RootApiKey)
+			
+			// Convert binary user ID to hex string
+			userIdHex := hex.EncodeToString(resp.Msg.UserId)
+			
+			// Format the UUID with dashes
+			formattedUserId := fmt.Sprintf("%s-%s-%s-%s-%s",
+				userIdHex[0:8], userIdHex[8:12], userIdHex[12:16], userIdHex[16:20], userIdHex[20:])
+			
+			fmt.Printf("User ID: %s\n", formattedUserId)
 			fmt.Println("\nIMPORTANT: Save these values securely. The API key will not be shown again.")
 
 			// Save to config file if requested
 			if saveConfig {
 				config := ConfigFile{
 					ServerAddress: serverAddress,
-					ApiKey:        initResponse.RootApiKey,
-					UserId:        initResponse.UserId,
+					ApiKey:        resp.Msg.RootApiKey,
+					UserId:        formattedUserId,
 					Initialized:   true,
 					InitializedAt: time.Now(),
 				}
@@ -202,9 +220,10 @@ func init() {
 	rootCmd.AddCommand(initCmd)
 
 	// Local flags
-	initCmd.Flags().StringVar(&serverAddress, "server", "http://localhost:8080", "GoodMem server address")
+	initCmd.Flags().StringVar(&serverAddress, "server", "https://localhost:9090", "GoodMem server address (gRPC API)")
 	initCmd.Flags().StringVar(&configDir, "config-dir", "", "Config directory path (defaults to ~/.goodmem)")
 	initCmd.Flags().StringVar(&configFile, "config-file", "", "Config file path (defaults to ~/.goodmem/config.json)")
 	initCmd.Flags().BoolVar(&saveConfig, "save-config", true, "Save the API key to the config file")
 	initCmd.Flags().BoolVar(&forceInit, "force", false, "Force re-initialization even if already initialized")
+	initCmd.Flags().BoolVar(&insecure, "insecure", true, "Skip TLS certificate validation (for self-signed certs)")
 }

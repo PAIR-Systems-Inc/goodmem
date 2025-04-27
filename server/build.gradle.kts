@@ -17,6 +17,7 @@ dependencies {
     implementation("io.grpc:grpc-protobuf:1.72.0")
     implementation("io.grpc:grpc-stub:1.72.0")
     implementation("io.grpc:grpc-inprocess:1.72.0")
+    implementation("io.grpc:grpc-services:1.72.0")
     
     // JSON
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.3")
@@ -97,4 +98,23 @@ tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJ
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+
+tasks.register<JavaExec>("debugRun") {
+    group = "Debugging" // Assign it to the 'Debugging' group in './gradlew tasks' output
+    description = "Runs the main server class with JVM debug agent enabled on port 5005, waiting for attachment."
+
+    // Make sure the code is compiled first
+    dependsOn(tasks.named("classes"))
+
+    // Use the same classpath that the standard 'run' task would use
+    classpath = sourceSets.main.get().runtimeClasspath
+
+    // Configure the main class using the value from the 'application' plugin setting
+    mainClass.set(application.mainClass) // Gets "com.goodmem.Main" from your application block
+
+    // Add the JDWP agent arguments unconditionally for this task
+    // suspend=y makes it wait for the debugger
+    jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005")
 }

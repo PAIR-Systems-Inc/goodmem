@@ -35,12 +35,17 @@ const (
 const (
 	// UserServiceGetUserProcedure is the fully-qualified name of the UserService's GetUser RPC.
 	UserServiceGetUserProcedure = "/goodmem.v1.UserService/GetUser"
+	// UserServiceInitializeSystemProcedure is the fully-qualified name of the UserService's
+	// InitializeSystem RPC.
+	UserServiceInitializeSystemProcedure = "/goodmem.v1.UserService/InitializeSystem"
 )
 
 // UserServiceClient is a client for the goodmem.v1.UserService service.
 type UserServiceClient interface {
 	// Retrieves user details (excluding sensitive info)
 	GetUser(context.Context, *connect_go.Request[v1.GetUserRequest]) (*connect_go.Response[v1.User], error)
+	// Initializes the system with a root user and API key (if not already initialized)
+	InitializeSystem(context.Context, *connect_go.Request[v1.InitializeSystemRequest]) (*connect_go.Response[v1.InitializeSystemResponse], error)
 }
 
 // NewUserServiceClient constructs a client for the goodmem.v1.UserService service. By default, it
@@ -58,12 +63,18 @@ func NewUserServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts
 			baseURL+UserServiceGetUserProcedure,
 			opts...,
 		),
+		initializeSystem: connect_go.NewClient[v1.InitializeSystemRequest, v1.InitializeSystemResponse](
+			httpClient,
+			baseURL+UserServiceInitializeSystemProcedure,
+			opts...,
+		),
 	}
 }
 
 // userServiceClient implements UserServiceClient.
 type userServiceClient struct {
-	getUser *connect_go.Client[v1.GetUserRequest, v1.User]
+	getUser          *connect_go.Client[v1.GetUserRequest, v1.User]
+	initializeSystem *connect_go.Client[v1.InitializeSystemRequest, v1.InitializeSystemResponse]
 }
 
 // GetUser calls goodmem.v1.UserService.GetUser.
@@ -71,10 +82,17 @@ func (c *userServiceClient) GetUser(ctx context.Context, req *connect_go.Request
 	return c.getUser.CallUnary(ctx, req)
 }
 
+// InitializeSystem calls goodmem.v1.UserService.InitializeSystem.
+func (c *userServiceClient) InitializeSystem(ctx context.Context, req *connect_go.Request[v1.InitializeSystemRequest]) (*connect_go.Response[v1.InitializeSystemResponse], error) {
+	return c.initializeSystem.CallUnary(ctx, req)
+}
+
 // UserServiceHandler is an implementation of the goodmem.v1.UserService service.
 type UserServiceHandler interface {
 	// Retrieves user details (excluding sensitive info)
 	GetUser(context.Context, *connect_go.Request[v1.GetUserRequest]) (*connect_go.Response[v1.User], error)
+	// Initializes the system with a root user and API key (if not already initialized)
+	InitializeSystem(context.Context, *connect_go.Request[v1.InitializeSystemRequest]) (*connect_go.Response[v1.InitializeSystemResponse], error)
 }
 
 // NewUserServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -88,10 +106,17 @@ func NewUserServiceHandler(svc UserServiceHandler, opts ...connect_go.HandlerOpt
 		svc.GetUser,
 		opts...,
 	)
+	userServiceInitializeSystemHandler := connect_go.NewUnaryHandler(
+		UserServiceInitializeSystemProcedure,
+		svc.InitializeSystem,
+		opts...,
+	)
 	return "/goodmem.v1.UserService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case UserServiceGetUserProcedure:
 			userServiceGetUserHandler.ServeHTTP(w, r)
+		case UserServiceInitializeSystemProcedure:
+			userServiceInitializeSystemHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -103,4 +128,8 @@ type UnimplementedUserServiceHandler struct{}
 
 func (UnimplementedUserServiceHandler) GetUser(context.Context, *connect_go.Request[v1.GetUserRequest]) (*connect_go.Response[v1.User], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("goodmem.v1.UserService.GetUser is not implemented"))
+}
+
+func (UnimplementedUserServiceHandler) InitializeSystem(context.Context, *connect_go.Request[v1.InitializeSystemRequest]) (*connect_go.Response[v1.InitializeSystemResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("goodmem.v1.UserService.InitializeSystem is not implemented"))
 }

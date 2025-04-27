@@ -115,6 +115,37 @@ public final class Users {
             return StatusOr.ofException(e);
         }
     }
+    
+    /**
+     * Loads a single user by username.
+     *
+     * @param conn an open JDBC connection
+     * @param username the username of the user to load
+     * @return StatusOr containing an Optional User or an error
+     */
+    @Nonnull
+    public static StatusOr<Optional<User>> loadByUsername(Connection conn, String username) {
+        String sql = """
+                SELECT user_id, username, email, display_name, created_at, updated_at
+                  FROM "user"
+                 WHERE username = ?
+                """;
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, username);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    StatusOr<User> userOr = extractUser(rs);
+                    if (userOr.isNotOk()) {
+                        return StatusOr.ofStatus(userOr.getStatus());
+                    }
+                    return StatusOr.ofValue(Optional.of(userOr.getValue()));
+                }
+                return StatusOr.ofValue(Optional.empty());
+            }
+        } catch (SQLException e) {
+            return StatusOr.ofException(e);
+        }
+    }
 
     /**
      * Inserts or updates a user row (upsert).

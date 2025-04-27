@@ -247,7 +247,7 @@ func init() {
 	spaceCmd.AddCommand(deleteSpaceCmd)
 
 	// Global flags for all space commands
-	spaceCmd.PersistentFlags().StringVar(&serverAddress, "server", "http://localhost:9090", "GoodMem server address")
+	spaceCmd.PersistentFlags().StringVar(&serverAddress, "server", "http://localhost:9090", "GoodMem server address (gRPC API)")
 
 	// Flags for create
 	createSpaceCmd.Flags().StringVar(&spaceName, "name", "", "Name of the space")

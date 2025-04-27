@@ -62,5 +62,5 @@ func init() {
 	userCmd.AddCommand(getUserCmd)
 
 	// Global flags for all user commands
-	userCmd.PersistentFlags().StringVar(&serverAddress, "server", "http://localhost:9090", "GoodMem server address")
+	userCmd.PersistentFlags().StringVar(&serverAddress, "server", "http://localhost:9090", "GoodMem server address (gRPC API)")
 }

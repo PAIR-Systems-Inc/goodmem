@@ -1,5 +1,7 @@
 package com.goodmem;
 
+import com.google.common.io.ByteSource;
+import com.google.common.io.Resources;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Timestamps;
 import goodmem.v1.ApiKeyServiceGrpc;
@@ -29,18 +31,21 @@ import goodmem.v1.SpaceServiceGrpc;
 import goodmem.v1.UserOuterClass.GetUserRequest;
 import goodmem.v1.UserOuterClass.User;
 import goodmem.v1.UserServiceGrpc;
+import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.ServerInterceptors;
+import io.grpc.TlsServerCredentials;
+import io.grpc.TlsServerCredentials.ClientAuth;
 import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import java.io.IOException;
-import java.time.Instant;
+import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -79,12 +84,43 @@ public class Main {
   }
 
   public void startGrpcServer() throws IOException {
+    // Create special interceptor for the initializeSystem method (no auth required)
+    var initMethodAuthorizer = new MethodAuthorizer()
+        .allowMethod("goodmem.v1.UserService/InitializeSystem");
+
+    // Load certificate and key files from resources using absolute paths
+    var serverCrt = Main.class.getResource("/certs/server.crt");
+    var serverKey = Main.class.getResource("/certs/server.key");
+
+    if (serverCrt == null) {
+      throw new IllegalArgumentException("certs/server.crt could not be loaded.");
+    }
+    if (serverKey == null) {
+      throw new IllegalArgumentException("certs/server.key could not be loaded.");
+    }
+
+    ByteSource serverCrtBs = Resources.asByteSource(serverCrt);
+    ByteSource serverKeyBs = Resources.asByteSource(serverKey);
+
+    // Create TLS credentials with the certificate and key files
+    var credentials = TlsServerCredentials.newBuilder()
+        .clientAuth(ClientAuth.NONE) // Don't require client certificates
+        .keyManager(serverCrtBs.openBufferedStream(), serverKeyBs.openBufferedStream())
+        .build();
+        
+    // Log certificate information
+    logger.info("TLS enabled for gRPC server with:");
+    logger.info(" - Certificate: " + serverCrt);
+    logger.info(" - Private key: " + serverKey);
+
     grpcServer =
-        ServerBuilder.forPort(GRPC_PORT)
+        Grpc.newServerBuilderForPort(GRPC_PORT, credentials)
             .addService(ServerInterceptors.intercept(spaceServiceImpl, new AuthInterceptor()))
-            .addService(ServerInterceptors.intercept(userServiceImpl, new AuthInterceptor()))
+            // For user service, we need to allow InitializeSystem to be called without auth
+            .addService(ServerInterceptors.intercept(userServiceImpl, new ConditionalAuthInterceptor(initMethodAuthorizer)))
             .addService(ServerInterceptors.intercept(memoryServiceImpl, new AuthInterceptor()))
             .addService(ServerInterceptors.intercept(apiKeyServiceImpl, new AuthInterceptor()))
+            .addService(ProtoReflectionServiceV1.newInstance())
             .build()
             .start();
     logger.info("gRPC Server started, listening on port " + GRPC_PORT);

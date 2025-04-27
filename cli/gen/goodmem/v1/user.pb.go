@@ -152,6 +152,110 @@ func (x *GetUserRequest) GetUserId() []byte {
 	return nil
 }
 
+type InitializeSystemRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InitializeSystemRequest) Reset() {
+	*x = InitializeSystemRequest{}
+	mi := &file_goodmem_v1_user_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InitializeSystemRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InitializeSystemRequest) ProtoMessage() {}
+
+func (x *InitializeSystemRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goodmem_v1_user_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InitializeSystemRequest.ProtoReflect.Descriptor instead.
+func (*InitializeSystemRequest) Descriptor() ([]byte, []int) {
+	return file_goodmem_v1_user_proto_rawDescGZIP(), []int{2}
+}
+
+type InitializeSystemResponse struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	AlreadyInitialized bool                   `protobuf:"varint,1,opt,name=already_initialized,json=alreadyInitialized,proto3" json:"already_initialized,omitempty"` // Whether the system was already initialized
+	Message            string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`                                                  // Status message
+	RootApiKey         string                 `protobuf:"bytes,3,opt,name=root_api_key,json=rootApiKey,proto3" json:"root_api_key,omitempty"`                        // The raw API key (only provided when newly initialized)
+	UserId             []byte                 `protobuf:"bytes,4,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`                                      // The user ID of the root user (only provided when newly initialized)
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *InitializeSystemResponse) Reset() {
+	*x = InitializeSystemResponse{}
+	mi := &file_goodmem_v1_user_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InitializeSystemResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InitializeSystemResponse) ProtoMessage() {}
+
+func (x *InitializeSystemResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goodmem_v1_user_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InitializeSystemResponse.ProtoReflect.Descriptor instead.
+func (*InitializeSystemResponse) Descriptor() ([]byte, []int) {
+	return file_goodmem_v1_user_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *InitializeSystemResponse) GetAlreadyInitialized() bool {
+	if x != nil {
+		return x.AlreadyInitialized
+	}
+	return false
+}
+
+func (x *InitializeSystemResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *InitializeSystemResponse) GetRootApiKey() string {
+	if x != nil {
+		return x.RootApiKey
+	}
+	return ""
+}
+
+func (x *InitializeSystemResponse) GetUserId() []byte {
+	if x != nil {
+		return x.UserId
+	}
+	return nil
+}
+
 var File_goodmem_v1_user_proto protoreflect.FileDescriptor
 
 const file_goodmem_v1_user_proto_rawDesc = "" +
@@ -168,9 +272,17 @@ const file_goodmem_v1_user_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\")\n" +
 	"\x0eGetUserRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\fR\x06userId2F\n" +
+	"\auser_id\x18\x01 \x01(\fR\x06userId\"\x19\n" +
+	"\x17InitializeSystemRequest\"\xa0\x01\n" +
+	"\x18InitializeSystemResponse\x12/\n" +
+	"\x13already_initialized\x18\x01 \x01(\bR\x12alreadyInitialized\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12 \n" +
+	"\froot_api_key\x18\x03 \x01(\tR\n" +
+	"rootApiKey\x12\x17\n" +
+	"\auser_id\x18\x04 \x01(\fR\x06userId2\xa5\x01\n" +
 	"\vUserService\x127\n" +
-	"\aGetUser\x12\x1a.goodmem.v1.GetUserRequest\x1a\x10.goodmem.v1.UserB/Z-github.com/pairsys/goodmem/cli/gen/goodmem/v1b\x06proto3"
+	"\aGetUser\x12\x1a.goodmem.v1.GetUserRequest\x1a\x10.goodmem.v1.User\x12]\n" +
+	"\x10InitializeSystem\x12#.goodmem.v1.InitializeSystemRequest\x1a$.goodmem.v1.InitializeSystemResponseB/Z-github.com/pairsys/goodmem/cli/gen/goodmem/v1b\x06proto3"
 
 var (
 	file_goodmem_v1_user_proto_rawDescOnce sync.Once
@@ -184,19 +296,23 @@ func file_goodmem_v1_user_proto_rawDescGZIP() []byte {
 	return file_goodmem_v1_user_proto_rawDescData
 }
 
-var file_goodmem_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_goodmem_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_goodmem_v1_user_proto_goTypes = []any{
-	(*User)(nil),                  // 0: goodmem.v1.User
-	(*GetUserRequest)(nil),        // 1: goodmem.v1.GetUserRequest
-	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
+	(*User)(nil),                     // 0: goodmem.v1.User
+	(*GetUserRequest)(nil),           // 1: goodmem.v1.GetUserRequest
+	(*InitializeSystemRequest)(nil),  // 2: goodmem.v1.InitializeSystemRequest
+	(*InitializeSystemResponse)(nil), // 3: goodmem.v1.InitializeSystemResponse
+	(*timestamppb.Timestamp)(nil),    // 4: google.protobuf.Timestamp
 }
 var file_goodmem_v1_user_proto_depIdxs = []int32{
-	2, // 0: goodmem.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	2, // 1: goodmem.v1.User.updated_at:type_name -> google.protobuf.Timestamp
+	4, // 0: goodmem.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	4, // 1: goodmem.v1.User.updated_at:type_name -> google.protobuf.Timestamp
 	1, // 2: goodmem.v1.UserService.GetUser:input_type -> goodmem.v1.GetUserRequest
-	0, // 3: goodmem.v1.UserService.GetUser:output_type -> goodmem.v1.User
-	3, // [3:4] is the sub-list for method output_type
-	2, // [2:3] is the sub-list for method input_type
+	2, // 3: goodmem.v1.UserService.InitializeSystem:input_type -> goodmem.v1.InitializeSystemRequest
+	0, // 4: goodmem.v1.UserService.GetUser:output_type -> goodmem.v1.User
+	3, // 5: goodmem.v1.UserService.InitializeSystem:output_type -> goodmem.v1.InitializeSystemResponse
+	4, // [4:6] is the sub-list for method output_type
+	2, // [2:4] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
 	2, // [2:2] is the sub-list for extension extendee
 	0, // [0:2] is the sub-list for field type_name
@@ -213,7 +329,7 @@ func file_goodmem_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goodmem_v1_user_proto_rawDesc), len(file_goodmem_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

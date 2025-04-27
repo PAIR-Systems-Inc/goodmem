@@ -22,6 +22,8 @@ message User {
 service UserService {
   // Retrieves user details (excluding sensitive info)
   rpc GetUser(GetUserRequest) returns (User);
+  // Initializes the system with a root user and API key (if not already initialized)
+  rpc InitializeSystem(InitializeSystemRequest) returns (InitializeSystemResponse);
   // Could add ListUsers, UpdateUser (for display_name etc.) if needed
 }
 
@@ -29,4 +31,15 @@ message GetUserRequest {
   bytes user_id = 1; // Get by UUID (16 bytes)
   // Alternatively, allow lookup by email if desired
   // string email = 2;
+}
+
+message InitializeSystemRequest {
+  // Empty request as no parameters are needed
+}
+
+message InitializeSystemResponse {
+  bool already_initialized = 1; // Whether the system was already initialized
+  string message = 2; // Status message
+  string root_api_key = 3; // The raw API key (only provided when newly initialized)
+  bytes user_id = 4; // The user ID of the root user (only provided when newly initialized)
 }
