@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/bufbuild/connect-go"
@@ -33,9 +32,13 @@ var createSpaceCmd = &cobra.Command{
 	Short: "Create a new space",
 	Long:  `Create a new space in the GoodMem service with the specified name and labels.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewSpaceServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		// Parse labels from key=value format
@@ -78,9 +81,13 @@ var listSpacesCmd = &cobra.Command{
 	Short: "List spaces",
 	Long:  `List spaces in the GoodMem service, optionally filtered by labels.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewSpaceServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		// Parse labels from key=value format
@@ -123,9 +130,14 @@ var deleteSpaceCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		spaceID := args[0]
+		
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewSpaceServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		req := connect.NewRequest(&v1.DeleteSpaceRequest{
@@ -153,9 +165,14 @@ var getSpaceCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		spaceID := args[0]
+		
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewSpaceServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		req := connect.NewRequest(&v1.GetSpaceRequest{
@@ -188,9 +205,14 @@ var updateSpaceCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		spaceID := args[0]
+		
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewSpaceServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		// Parse labels from key=value format

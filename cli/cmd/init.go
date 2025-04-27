@@ -15,6 +15,7 @@ import (
 	"github.com/pairsys/goodmem/cli/gen/goodmem/v1"
 	"github.com/pairsys/goodmem/cli/gen/goodmem/v1/v1connect"
 	"github.com/spf13/cobra"
+	"golang.org/x/net/http2"
 )
 
 // ConfigFile structure
@@ -96,26 +97,16 @@ The init command will:
 		// Make the init request to the server using gRPC
 		fmt.Printf("Connecting to gRPC API at %s\n", serverAddress)
 		
-		// Create the gRPC client with TLS configuration
-		// For development with self-signed certificates, we need to skip certificate verification
-		transport := &http.Transport{}
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(insecure, serverAddress)
 		
-		// If insecure flag is set or the server uses https, configure TLS
 		if insecure || (len(serverAddress) >= 5 && serverAddress[:5] == "https") {
 			fmt.Println("Using TLS with certificate verification disabled (insecure mode)")
-			transport.TLSClientConfig = &tls.Config{
-				InsecureSkipVerify: true, // For development only - allows self-signed certificates
-			}
-		}
-		
-		httpClient := http.Client{
-			Timeout: 30 * time.Second,
-			Transport: transport,
 		}
 		
 		// Create user service client with gRPC protocol
 		userClient := v1connect.NewUserServiceClient(
-			&httpClient, 
+			httpClient, 
 			serverAddress, 
 			connect.WithGRPC(),
 		)
@@ -214,6 +205,31 @@ func writeConfigFile(path string, config ConfigFile) error {
 	}
 
 	return os.WriteFile(path, data, 0600)
+}
+
+// createHTTPClient creates an HTTP client with proper HTTP/2 configuration
+// This is critical for gRPC operations to work correctly
+func createHTTPClient(insecure bool, serverAddr string) *http.Client {
+	// Create transport with HTTP/2 enabled
+	transport := &http.Transport{
+		ForceAttemptHTTP2: true, // Explicitly enable HTTP/2
+	}
+	
+	// Configure TLS if needed
+	if insecure || (len(serverAddr) >= 5 && serverAddr[:5] == "https") {
+		transport.TLSClientConfig = &tls.Config{
+			InsecureSkipVerify: true, // For development only
+		}
+	}
+	
+	// Apply HTTP/2 settings - this is critical for gRPC to work properly
+	http2.ConfigureTransports(transport)
+	
+	// Create and return the client
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: transport,
+	}
 }
 
 func init() {

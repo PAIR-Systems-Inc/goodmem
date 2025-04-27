@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
 	"github.com/bufbuild/connect-go"
 	v1 "github.com/pairsys/goodmem/cli/gen/goodmem/v1"
@@ -30,9 +29,14 @@ var getUserCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		userID := args[0]
+		
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewUserServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		req := connect.NewRequest(&v1.GetUserRequest{

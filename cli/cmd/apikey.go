@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/bufbuild/connect-go"
@@ -33,9 +32,13 @@ var createApiKeyCmd = &cobra.Command{
 	Short: "Create a new API key",
 	Long:  `Create a new API key in the GoodMem service.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewApiKeyServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		// Parse labels from key=value format
@@ -79,9 +82,13 @@ var listApiKeysCmd = &cobra.Command{
 	Short: "List API keys",
 	Long:  `List all API keys for the authenticated user in the GoodMem service.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewApiKeyServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		req := connect.NewRequest(&v1.ListApiKeysRequest{})
@@ -112,9 +119,14 @@ var updateApiKeyCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		apiKeyID := args[0]
+		
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewApiKeyServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		// Parse labels from key=value format
@@ -173,9 +185,14 @@ var deleteApiKeyCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		apiKeyID := args[0]
+		
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewApiKeyServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		req := connect.NewRequest(&v1.DeleteApiKeyRequest{

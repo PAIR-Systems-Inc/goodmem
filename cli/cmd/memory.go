@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/bufbuild/connect-go"
@@ -35,9 +34,13 @@ var createMemoryCmd = &cobra.Command{
 	Short: "Create a new memory",
 	Long:  `Create a new memory in the GoodMem service.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewMemoryServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		// Parse metadata from key=value format
@@ -83,9 +86,14 @@ var getMemoryCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		memoryID := args[0]
+		
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewMemoryServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		req := connect.NewRequest(&v1.GetMemoryRequest{
@@ -119,10 +127,14 @@ var listMemoriesCmd = &cobra.Command{
 		if spaceID == "" {
 			return fmt.Errorf("space-id is required")
 		}
-
+		
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewMemoryServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		req := connect.NewRequest(&v1.ListMemoriesRequest{
@@ -155,9 +167,14 @@ var deleteMemoryCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		memoryID := args[0]
+		
+		// Create HTTP client with proper HTTP/2 configuration for gRPC
+		httpClient := createHTTPClient(true, serverAddress)
+		
 		client := v1connect.NewMemoryServiceClient(
-			http.DefaultClient,
+			httpClient,
 			serverAddress,
+			connect.WithGRPC(),
 		)
 
 		req := connect.NewRequest(&v1.DeleteMemoryRequest{
