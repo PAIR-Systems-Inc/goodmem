@@ -49,12 +49,23 @@ import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import java.io.IOException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import io.javalin.plugin.bundled.CorsPluginConfig.CorsRule;
+import io.minio.BucketExistsArgs;
+import io.minio.MakeBucketArgs;
+import io.minio.MinioClient;
+import io.minio.errors.ErrorResponseException;
+import io.minio.errors.InsufficientDataException;
+import io.minio.errors.InternalException;
+import io.minio.errors.InvalidResponseException;
+import io.minio.errors.ServerException;
+import io.minio.errors.XmlParserException;
 import org.tinylog.Logger;
 
 public class Main {
@@ -70,6 +81,7 @@ public class Main {
   private final HikariDataSource dataSource;
 
   private final MinioConfig minioConfig;
+  private final MinioClient minioClient;
 
   // gRPC blocking stubs for the REST-to-gRPC bridge
   private final SpaceServiceGrpc.SpaceServiceBlockingStub spaceService;
@@ -80,22 +92,18 @@ public class Main {
   public Main() {
     // Initialize database connection pool
     this.dataSource = setupDataSource();
-    
-    // Get MinIO configuration
-    minioConfig = new MinioConfig(
-        System.getProperty("MINIO_ENDPOINT"),
-        System.getProperty("MINIO_ACCESS_KEY"),
-        System.getProperty("MINIO_SECRET_KEY"),
-        System.getProperty("MINIO_BUCKET")
-    );
-    Logger.info("Configured MinIO.", minioConfig);
+
+    // Initialize the connection to MinIO.
+    InitializedMinio minioInit = setupMinioSource();
+    minioConfig = minioInit.config();
+    minioClient = minioInit.client();
 
     // Create service configs
     var userServiceConfig = new UserServiceImpl.Config(dataSource);
     
     // Create service implementations with connection pool
-    this.spaceServiceImpl = new SpaceServiceImpl(new SpaceServiceImpl.Config(
-        dataSource, "openai-ada-002")); // Default embedding model
+    this.spaceServiceImpl = new SpaceServiceImpl(
+        new SpaceServiceImpl.Config(dataSource, "openai-ada-002"));
     this.userServiceImpl = new UserServiceImpl(userServiceConfig);
     this.memoryServiceImpl = new MemoryServiceImpl(
         new MemoryServiceImpl.Config(dataSource, minioConfig));
@@ -112,6 +120,46 @@ public class Main {
     this.apiKeyService = ApiKeyServiceGrpc.newBlockingStub(channel);
   }
 
+  private record InitializedMinio(
+      MinioConfig config,
+      MinioClient client) {}
+
+  private InitializedMinio setupMinioSource() {
+    // Get MinIO configuration
+    var minioConfig = new MinioConfig(
+        System.getenv("MINIO_ENDPOINT"),
+        System.getenv("MINIO_ACCESS_KEY"),
+        System.getenv("MINIO_SECRET_KEY"),
+        System.getenv("MINIO_BUCKET")
+    );
+    Logger.info("Configured MinIO: {}", minioConfig.toSecureString());
+
+    var minioClient =
+        MinioClient.builder()
+            .endpoint(minioConfig.minioEndpoint())
+            .credentials(minioConfig.minioAccessKey(), minioConfig.minioSecretKey())
+            .build();
+    try {
+      boolean exists = minioClient.bucketExists(
+          BucketExistsArgs.builder().bucket(minioConfig.minioBucket()).build());
+      if (exists) {
+        Logger.info("Found MinIO memory storage bucket {}.", minioConfig.minioBucket());
+      } else {
+        Logger.info("MinIO memory storage bucket {} does NOT exist.", minioConfig.minioBucket());
+        minioClient.makeBucket(
+            MakeBucketArgs.builder().bucket(minioConfig.minioBucket()).build());
+        Logger.info("Storage bucket {} was created.", minioConfig.minioBucket());
+      }
+    } catch (ErrorResponseException | InsufficientDataException | InternalException |
+             InvalidKeyException | InvalidResponseException | IOException |
+             NoSuchAlgorithmException | ServerException | XmlParserException e) {
+      Logger.error(
+          e, "Unexpected failure checking MinIO memory storage bucket {}.", minioConfig.minioBucket());
+    }
+
+    return new InitializedMinio(minioConfig, minioClient);
+  }
+
   /**
    * Sets up and configures the HikariCP connection pool with database properties
    * from system properties.
@@ -120,9 +168,9 @@ public class Main {
    */
   private HikariDataSource setupDataSource() {
     // Get database configuration from environment properties
-    String dbUrl = System.getProperty("DB_URL");
-    String dbUser = System.getProperty("DB_USER");
-    String dbPassword = System.getProperty("DB_PASSWORD");
+    String dbUrl = System.getenv("DB_URL");
+    String dbUser = System.getenv("DB_USER");
+    String dbPassword = System.getenv("DB_PASSWORD");
     
     // Configure HikariCP
     HikariConfig config = new HikariConfig();
@@ -140,7 +188,7 @@ public class Main {
     config.addDataSourceProperty("prepStmtCacheSize", "250");
     config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
 
-    Logger.info("Initializing database connection pool with URL: {}", dbUrl);
+    Logger.info("Initializing database connection pool with URL: {} and user {}", dbUrl, dbUser);
     return new HikariDataSource(config);
   }
 

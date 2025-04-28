@@ -11,6 +11,9 @@ version = "0.1.0"
 dependencies {
     // Javalin
     implementation("io.javalin:javalin:6.6.0")
+
+    // MinIO official client.
+    implementation("io.minio:minio:8.5.17")
     
     // gRPC
     implementation("io.grpc:grpc-netty-shaded:1.72.0")
