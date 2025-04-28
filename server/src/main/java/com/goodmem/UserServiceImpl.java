@@ -1,7 +1,6 @@
 package com.goodmem;
 
 import com.goodmem.operations.SystemInitOperation;
-import com.google.protobuf.ByteString;
 import com.google.protobuf.Timestamp;
 import com.zaxxer.hikari.HikariDataSource;
 import goodmem.v1.UserOuterClass.GetUserRequest;
@@ -10,12 +9,12 @@ import goodmem.v1.UserOuterClass.InitializeSystemResponse;
 import goodmem.v1.UserServiceGrpc.UserServiceImplBase;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
-import java.nio.ByteBuffer;
+import org.tinylog.Logger;
+
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.UUID;
-import java.util.logging.Logger;
 
 /**
  * Implementation of the User service that provides user management functionality.
@@ -25,7 +24,6 @@ import java.util.logging.Logger;
  * the gRPC service interface defined in the protocol buffer.
  */
 public class UserServiceImpl extends UserServiceImplBase {
-  private static final Logger logger = Logger.getLogger(UserServiceImpl.class.getName());
   private final Config config;
 
   public record Config(HikariDataSource dataSource) {}
@@ -36,7 +34,7 @@ public class UserServiceImpl extends UserServiceImplBase {
 
   @Override
   public void getUser(GetUserRequest request, StreamObserver<goodmem.v1.UserOuterClass.User> responseObserver) {
-    logger.info("Getting user details");
+    Logger.info("Getting user details");
 
     // TODO: Validate user ID
     // TODO: Retrieve user from database
@@ -45,7 +43,7 @@ public class UserServiceImpl extends UserServiceImplBase {
     // For now, return dummy data
     goodmem.v1.UserOuterClass.User user =
         goodmem.v1.UserOuterClass.User.newBuilder()
-            .setUserId(getBytesFromUUID(UUID.randomUUID()))
+            .setUserId(Uuids.getBytesFromUUID(UUID.randomUUID()))
             .setEmail("user@example.com")
             .setDisplayName("Example User")
             .setUsername("exampleuser")
@@ -59,7 +57,7 @@ public class UserServiceImpl extends UserServiceImplBase {
 
   @Override
   public void initializeSystem(InitializeSystemRequest request, StreamObserver<InitializeSystemResponse> responseObserver) {
-    logger.info("Initializing system via gRPC");
+    Logger.info("Initializing system via gRPC");
     
     // Set up database connection using the connection pool
     try (Connection connection = config.dataSource().getConnection()) {
@@ -69,7 +67,7 @@ public class UserServiceImpl extends UserServiceImplBase {
       SystemInitOperation.InitResult result = operation.execute();
 
       if (!result.isSuccess()) {
-        logger.severe("System initialization failed: " + result.getErrorMessage());
+        Logger.error("System initialization failed: {}", result.getErrorMessage());
         responseObserver.onError(Status.INTERNAL
             .withDescription("System initialization failed: " + result.getErrorMessage())
             .asRuntimeException());
@@ -85,21 +83,19 @@ public class UserServiceImpl extends UserServiceImplBase {
       if (!result.isAlreadyInitialized() && result.getUserId() != null) {
         responseBuilder
             .setRootApiKey(result.getApiKey())
-            .setUserId(getBytesFromUUID(result.getUserId()));
+            .setUserId(Uuids.getBytesFromUUID(result.getUserId()));
       }
       
       responseObserver.onNext(responseBuilder.build());
       responseObserver.onCompleted();
       
     } catch (SQLException e) {
-      logger.severe("Database connection error during system initialization: " + e.getMessage());
-      e.printStackTrace();
+      Logger.error(e, "Database connection error during system initialization.");
       responseObserver.onError(Status.INTERNAL
           .withDescription("Database connection error: " + e.getMessage())
           .asRuntimeException());
     } catch (Exception e) {
-      logger.severe("Unexpected error during system initialization: " + e.getMessage());
-      e.printStackTrace();
+      Logger.error(e, "Unexpected error during system initialization.");
       responseObserver.onError(Status.INTERNAL
           .withDescription("Unexpected error: " + e.getMessage())
           .asRuntimeException());
@@ -108,13 +104,7 @@ public class UserServiceImpl extends UserServiceImplBase {
 
   private Timestamp getCurrentTimestamp() {
     Instant now = Instant.now();
-    return Timestamp.newBuilder().setSeconds(now.getEpochSecond()).setNanos(now.getNano()).build();
-  }
-
-  private ByteString getBytesFromUUID(UUID uuid) {
-    ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
-    bb.putLong(uuid.getMostSignificantBits());
-    bb.putLong(uuid.getLeastSignificantBits());
-    return ByteString.copyFrom(bb.array());
+    return Timestamp.newBuilder().setSeconds(
+        now.getEpochSecond()).setNanos(now.getNano()).build();
   }
 }

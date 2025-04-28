@@ -53,6 +53,8 @@ import java.sql.Connection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+
+import io.javalin.plugin.bundled.CorsPluginConfig.CorsRule;
 import org.tinylog.Logger;
 
 public class Main {
@@ -67,13 +69,13 @@ public class Main {
   private final ApiKeyServiceImpl apiKeyServiceImpl;
   private final HikariDataSource dataSource;
 
+  private final MinioConfig minioConfig;
+
   // gRPC blocking stubs for the REST-to-gRPC bridge
   private final SpaceServiceGrpc.SpaceServiceBlockingStub spaceService;
   private final UserServiceGrpc.UserServiceBlockingStub userService;
   private final MemoryServiceGrpc.MemoryServiceBlockingStub memoryService;
   private final ApiKeyServiceGrpc.ApiKeyServiceBlockingStub apiKeyService;
-
-  private final MinioConfig minioConfig;
 
   public Main() {
     // Initialize database connection pool
@@ -111,8 +113,10 @@ public class Main {
   }
 
   /**
-   * TODO: fill this in
-   * @return
+   * Sets up and configures the HikariCP connection pool with database properties
+   * from system properties.
+   * 
+   * @return A configured HikariDataSource for database connections
    */
   private HikariDataSource setupDataSource() {
     // Get database configuration from environment properties
@@ -216,12 +220,8 @@ public class Main {
   public void startJavalinServer() {
     Javalin app =
         Javalin.create(
-                config -> {
-                  config.bundledPlugins.enableCors(
-                      cors -> {
-                        cors.addRule(it -> it.anyHost());
-                      });
-                })
+                config -> config.bundledPlugins.enableCors(
+                    cors -> cors.addRule(CorsRule::anyHost)))
             .start(REST_PORT);
 
     // Configure REST routes that map to gRPC methods
@@ -283,8 +283,10 @@ public class Main {
   }
 
   /**
-   * TODO: fill this in
-   * @param ctx
+   * Handles a REST request to retrieve a Space by ID.
+   * Converts the hex UUID to binary format and calls the gRPC service.
+   *
+   * @param ctx The Javalin context containing the request and response
    */
   private void handleGetSpace(Context ctx) {
     String spaceIdHex = ctx.pathParam("id");
@@ -293,15 +295,17 @@ public class Main {
         "REST GetSpace request for ID: {} with API key: {}", spaceIdHex, apiKey);
 
     StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
-    if (spaceIdOr.isOk()) {
-      GetSpaceRequest request = GetSpaceRequest
-          .newBuilder()
-          .setSpaceId(spaceIdOr.getValue())
-          .build();
-
-      Space response = spaceService.getSpace(request);
-      ctx.json(protoToMap(response));
+    if (spaceIdOr.isNotOk()) {
+      setError(ctx, 400, "Invalid space ID format");
+      return;
     }
+    GetSpaceRequest request = GetSpaceRequest
+        .newBuilder()
+        .setSpaceId(spaceIdOr.getValue())
+        .build();
+
+    Space response = spaceService.getSpace(request);
+    ctx.json(protoToMap(response));
   }
 
   private void handleListSpaces(Context ctx) {
@@ -334,8 +338,11 @@ public class Main {
   }
 
   /**
-   * // TODO: fill this in
-   * @param ctx
+   * Handles a REST request to update a Space by ID.
+   * Converts the hex UUID to binary format, builds the update request from JSON,
+   * and calls the gRPC service.
+   * 
+   * @param ctx The Javalin context containing the request and response
    */
   private void handleUpdateSpace(Context ctx) {
     String spaceIdHex = ctx.pathParam("id");
@@ -345,6 +352,7 @@ public class Main {
 
     StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
     if (spaceIdOr.isNotOk()) {
+      setError(ctx, 400, "Invalid space ID format");
       return;
     }
     UpdateSpaceRequest.Builder requestBuilder =
@@ -371,8 +379,10 @@ public class Main {
   }
 
   /**
-   * TODO: fill this in
-   * @param ctx
+   * Handles a REST request to delete a Space by ID.
+   * Converts the hex UUID to binary format and calls the gRPC service.
+   * 
+   * @param ctx The Javalin context containing the request and response
    */
   private void handleDeleteSpace(Context ctx) {
     String spaceIdHex = ctx.pathParam("id");
@@ -382,6 +392,7 @@ public class Main {
 
     StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
     if (spaceIdOr.isNotOk()) {
+      setError(ctx, 400, "Invalid space ID format");
       return;
     }
     spaceService.deleteSpace(
@@ -399,6 +410,7 @@ public class Main {
 
     StatusOr<ByteString> userIdOr = convertHexToUuidBytes(userIdHex);
     if (userIdOr.isNotOk()) {
+      setError(ctx, 400, "Invalid user ID format");
       return;
     }
 
@@ -410,8 +422,10 @@ public class Main {
   // Memory handlers
 
   /**
-   * TODO: fill this in
-   * @param ctx
+   * Handles a REST request to create a new Memory.
+   * Builds the create request from JSON and calls the gRPC service.
+   * 
+   * @param ctx The Javalin context containing the request and response
    */
   private void handleCreateMemory(Context ctx) {
     String apiKey = ctx.header("x-api-key");
@@ -424,7 +438,7 @@ public class Main {
       StatusOr<ByteString> spaceIdOr =
           convertHexToUuidBytes((String) json.get("space_id"));
       if (spaceIdOr.isNotOk()) {
-        // TODO: create a helper method that sets an HTTP error code appropriately, and also an error message, and returns that. Look for any other mid-method returns in handleXXX methods and fix those too.
+        setError(ctx, 400, "Invalid space ID format");
         return;
       }
       requestBuilder.setSpaceId(spaceIdOr.getValue());
@@ -449,8 +463,10 @@ public class Main {
   }
 
   /**
-   * TODO: document this
-   * @param ctx
+   * Handles a REST request to retrieve a Memory by ID.
+   * Converts the hex UUID to binary format and calls the gRPC service.
+   * 
+   * @param ctx The Javalin context containing the request and response
    */
   private void handleGetMemory(Context ctx) {
     String memoryIdHex = ctx.pathParam("id");
@@ -460,6 +476,7 @@ public class Main {
 
     StatusOr<ByteString> memoryIdOr = convertHexToUuidBytes(memoryIdHex);
     if (memoryIdOr.isNotOk()) {
+      setError(ctx, 400, "Invalid memory ID format");
       return;
     }
 
@@ -470,8 +487,10 @@ public class Main {
   }
 
   /**
-   * TODO: document this
-   * @param ctx
+   * Handles a REST request to list Memories within a Space.
+   * Converts the space hex UUID to binary format and calls the gRPC service.
+   * 
+   * @param ctx The Javalin context containing the request and response
    */
   private void handleListMemories(Context ctx) {
     String spaceIdHex = ctx.pathParam("spaceId");
@@ -481,6 +500,7 @@ public class Main {
 
     StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
     if (spaceIdOr.isNotOk()) {
+      setError(ctx, 400, "Invalid space ID format");
       return;
     }
 
@@ -491,8 +511,10 @@ public class Main {
   }
 
   /**
-   * TODO: document this
-   * @param ctx
+   * Handles a REST request to delete a Memory by ID.
+   * Converts the hex UUID to binary format and calls the gRPC service.
+   * 
+   * @param ctx The Javalin context containing the request and response
    */
   private void handleDeleteMemory(Context ctx) {
     String memoryIdHex = ctx.pathParam("id");
@@ -501,6 +523,7 @@ public class Main {
 
     StatusOr<ByteString> memoryIdOr = convertHexToUuidBytes(memoryIdHex);
     if (memoryIdOr.isNotOk()) {
+      setError(ctx, 400, "Invalid memory ID format");
       return;
     }
     memoryService.deleteMemory(
@@ -513,8 +536,10 @@ public class Main {
 
   // API Key handlers
   /**
-   * TODO: document this
-   * @param ctx
+   * Handles a REST request to create a new API Key.
+   * Builds the create request from JSON and calls the gRPC service.
+   * 
+   * @param ctx The Javalin context containing the request and response
    */
   private void handleCreateApiKey(Context ctx) {
     String apiKey = ctx.header("x-api-key");
@@ -539,8 +564,10 @@ public class Main {
   }
 
   /**
-   * TODO: document this
-   * @param ctx
+   * Handles a REST request to list API Keys for the current user.
+   * Calls the gRPC service to get the list of keys.
+   * 
+   * @param ctx The Javalin context containing the request and response
    */
   private void handleListApiKeys(Context ctx) {
     String apiKey = ctx.header("x-api-key");
@@ -553,8 +580,11 @@ public class Main {
   }
 
   /**
-   * TODO: document this
-   * @param ctx
+   * Handles a REST request to update an API Key by ID.
+   * Converts the hex UUID to binary format, builds the update request from JSON,
+   * and calls the gRPC service.
+   * 
+   * @param ctx The Javalin context containing the request and response
    */
   private void handleUpdateApiKey(Context ctx) {
     String apiKeyIdHex = ctx.pathParam("id");
@@ -564,6 +594,7 @@ public class Main {
 
     StatusOr<ByteString> apiKeyIdOr = convertHexToUuidBytes(apiKeyIdHex);
     if (apiKeyIdOr.isNotOk()) {
+      setError(ctx, 400, "Invalid API key ID format");
       return;
     }
     UpdateApiKeyRequest.Builder requestBuilder =
@@ -579,18 +610,11 @@ public class Main {
 
     if (json.containsKey("status")) {
       String statusStr = (String) json.get("status");
-      Apikey.Status status;
-      switch (statusStr.toUpperCase()) {
-        case "ACTIVE":
-          status = Apikey.Status.ACTIVE;
-          break;
-        case "INACTIVE":
-          status = Apikey.Status.INACTIVE;
-          break;
-        default:
-          status = Apikey.Status.STATUS_UNSPECIFIED;
-          break;
-      }
+      Apikey.Status status = switch (statusStr.toUpperCase()) {
+        case "ACTIVE" -> Apikey.Status.ACTIVE;
+        case "INACTIVE" -> Apikey.Status.INACTIVE;
+        default -> Apikey.Status.STATUS_UNSPECIFIED;
+      };
       requestBuilder.setStatus(status);
     }
 
@@ -599,8 +623,10 @@ public class Main {
   }
 
   /**
-   * TODO: document this
-   * @param ctx
+   * Handles a REST request to delete an API Key by ID.
+   * Converts the hex UUID to binary format and calls the gRPC service.
+   * 
+   * @param ctx The Javalin context containing the request and response
    */
   private void handleDeleteApiKey(Context ctx) {
     String apiKeyIdHex = ctx.pathParam("id");
@@ -609,6 +635,7 @@ public class Main {
 
     StatusOr<ByteString> apiKeyIdOr = convertHexToUuidBytes(apiKeyIdHex);
     if (apiKeyIdOr.isNotOk()) {
+      setError(ctx, 400, "Invalid API key ID format");
       return;
     }
     apiKeyService.deleteApiKey(
@@ -619,22 +646,22 @@ public class Main {
   // Utility methods for converting protocol buffer messages to Maps for JSON serialization
   private Map<String, Object> protoToMap(Space space) {
     Map<String, Object> map = new HashMap<>();
-    map.put("space_id", bytesToHex(space.getSpaceId().toByteArray()));
+    map.put("space_id", Uuids.bytesToHex(space.getSpaceId().toByteArray()));
     map.put("name", space.getName());
     map.put("labels", space.getLabelsMap());
     map.put("embedding_model", space.getEmbeddingModel());
     map.put("created_at", Timestamps.toMillis(space.getCreatedAt()));
     map.put("updated_at", Timestamps.toMillis(space.getUpdatedAt()));
-    map.put("owner_id", bytesToHex(space.getOwnerId().toByteArray()));
-    map.put("created_by_id", bytesToHex(space.getCreatedById().toByteArray()));
-    map.put("updated_by_id", bytesToHex(space.getUpdatedById().toByteArray()));
+    map.put("owner_id", Uuids.bytesToHex(space.getOwnerId().toByteArray()));
+    map.put("created_by_id", Uuids.bytesToHex(space.getCreatedById().toByteArray()));
+    map.put("updated_by_id", Uuids.bytesToHex(space.getUpdatedById().toByteArray()));
     map.put("public_read", space.getPublicRead());
     return map;
   }
 
   private Map<String, Object> protoToMap(User user) {
     Map<String, Object> map = new HashMap<>();
-    map.put("user_id", bytesToHex(user.getUserId().toByteArray()));
+    map.put("user_id", Uuids.bytesToHex(user.getUserId().toByteArray()));
     map.put("email", user.getEmail());
     map.put("display_name", user.getDisplayName());
     map.put("username", user.getUsername());
@@ -645,23 +672,23 @@ public class Main {
 
   private Map<String, Object> protoToMap(Memory memory) {
     Map<String, Object> map = new HashMap<>();
-    map.put("memory_id", bytesToHex(memory.getMemoryId().toByteArray()));
-    map.put("space_id", bytesToHex(memory.getSpaceId().toByteArray()));
+    map.put("memory_id", Uuids.bytesToHex(memory.getMemoryId().toByteArray()));
+    map.put("space_id", Uuids.bytesToHex(memory.getSpaceId().toByteArray()));
     map.put("original_content_ref", memory.getOriginalContentRef());
     map.put("content_type", memory.getContentType());
     map.put("metadata", memory.getMetadataMap());
     map.put("processing_status", memory.getProcessingStatus());
     map.put("created_at", Timestamps.toMillis(memory.getCreatedAt()));
     map.put("updated_at", Timestamps.toMillis(memory.getUpdatedAt()));
-    map.put("created_by_id", bytesToHex(memory.getCreatedById().toByteArray()));
-    map.put("updated_by_id", bytesToHex(memory.getUpdatedById().toByteArray()));
+    map.put("created_by_id", Uuids.bytesToHex(memory.getCreatedById().toByteArray()));
+    map.put("updated_by_id", Uuids.bytesToHex(memory.getUpdatedById().toByteArray()));
     return map;
   }
 
   private Map<String, Object> protoToMap(ApiKey apiKey) {
     Map<String, Object> map = new HashMap<>();
-    map.put("api_key_id", bytesToHex(apiKey.getApiKeyId().toByteArray()));
-    map.put("user_id", bytesToHex(apiKey.getUserId().toByteArray()));
+    map.put("api_key_id", Uuids.bytesToHex(apiKey.getApiKeyId().toByteArray()));
+    map.put("user_id", Uuids.bytesToHex(apiKey.getUserId().toByteArray()));
     map.put("key_prefix", apiKey.getKeyPrefix());
     map.put("status", apiKey.getStatus().name());
     map.put("labels", apiKey.getLabelsMap());
@@ -676,8 +703,8 @@ public class Main {
 
     map.put("created_at", Timestamps.toMillis(apiKey.getCreatedAt()));
     map.put("updated_at", Timestamps.toMillis(apiKey.getUpdatedAt()));
-    map.put("created_by_id", bytesToHex(apiKey.getCreatedById().toByteArray()));
-    map.put("updated_by_id", bytesToHex(apiKey.getUpdatedById().toByteArray()));
+    map.put("created_by_id", Uuids.bytesToHex(apiKey.getCreatedById().toByteArray()));
+    map.put("updated_by_id", Uuids.bytesToHex(apiKey.getUpdatedById().toByteArray()));
     return map;
   }
 
@@ -697,33 +724,6 @@ public class Main {
       return StatusOr.ofValue(ByteString.copyFrom(bytes));
     } catch (IllegalArgumentException e) {
       return StatusOr.ofStatus(Status.invalidArgument("Invalid string detected."));
-    }
-  }
-
-  private static final char[] HEX_ARRAY = "0123456789abcdef".toCharArray();
-
-  private String bytesToHex(byte[] bytes) {
-    char[] hexChars = new char[bytes.length * 2];
-    for (int j = 0; j < bytes.length; j++) {
-      int v = bytes[j] & 0xFF;
-      hexChars[j * 2] = HEX_ARRAY[v >>> 4];
-      hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
-    }
-
-    // Format as standard UUID with dashes
-    if (bytes.length == 16) {
-      String hex = new String(hexChars);
-      return hex.substring(0, 8)
-          + "-"
-          + hex.substring(8, 12)
-          + "-"
-          + hex.substring(12, 16)
-          + "-"
-          + hex.substring(16, 20)
-          + "-"
-          + hex.substring(20, 32);
-    } else {
-      return new String(hexChars);
     }
   }
 
@@ -770,6 +770,18 @@ public class Main {
       Logger.error(e, "Error during system initialization.");
       ctx.status(500).json(Map.of("error", "Internal server error: " + e.getMessage()));
     }
+  }
+
+  /**
+   * Helper method to set an error response with appropriate HTTP status code.
+   * 
+   * @param ctx The Javalin context to set the response on
+   * @param statusCode The HTTP status code to set
+   * @param message The error message to include in the response
+   */
+  private void setError(Context ctx, int statusCode, String message) {
+    ctx.status(statusCode).json(Map.of("error", message));
+    Logger.error("Error response: {} - {}", statusCode, message);
   }
 
   public static void main(String[] args) throws IOException {

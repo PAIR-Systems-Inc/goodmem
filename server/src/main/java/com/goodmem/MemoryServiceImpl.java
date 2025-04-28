@@ -1,7 +1,6 @@
 package com.goodmem;
 
 import com.goodmem.config.MinioConfig;
-import com.google.protobuf.ByteString;
 import com.google.protobuf.Empty;
 import com.google.protobuf.Timestamp;
 import com.zaxxer.hikari.HikariDataSource;
@@ -13,13 +12,11 @@ import goodmem.v1.MemoryOuterClass.ListMemoriesResponse;
 import goodmem.v1.MemoryOuterClass.Memory;
 import goodmem.v1.MemoryServiceGrpc.MemoryServiceImplBase;
 import io.grpc.stub.StreamObserver;
-import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.UUID;
-import java.util.logging.Logger;
+import org.tinylog.Logger;
 
 public class MemoryServiceImpl extends MemoryServiceImplBase {
-  private static final Logger logger = Logger.getLogger(MemoryServiceImpl.class.getName());
   private final Config config;
   
   public record Config(HikariDataSource dataSource, MinioConfig minioConfig) {}
@@ -30,7 +27,7 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
 
   @Override
   public void createMemory(CreateMemoryRequest request, StreamObserver<Memory> responseObserver) {
-    logger.info("Creating memory in space: " + bytesToHex(request.getSpaceId().toByteArray()));
+    Logger.info("Creating memory in space: {}", Uuids.bytesToHex(request.getSpaceId()));
 
     // TODO: Validate request fields
     // TODO: Check space exists and user has permissions
@@ -41,7 +38,7 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
     // For now, return dummy data
     Memory memory =
         Memory.newBuilder()
-            .setMemoryId(getBytesFromUUID(UUID.randomUUID()))
+            .setMemoryId(Uuids.getBytesFromUUID(UUID.randomUUID()))
             .setSpaceId(request.getSpaceId())
             .setOriginalContentRef(request.getOriginalContentRef())
             .setContentType(request.getContentType())
@@ -49,8 +46,8 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
             .setProcessingStatus("PENDING")
             .setCreatedAt(getCurrentTimestamp())
             .setUpdatedAt(getCurrentTimestamp())
-            .setCreatedById(getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth
-            .setUpdatedById(getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth
+            .setCreatedById(Uuids.getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth
+            .setUpdatedById(Uuids.getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth
             .build();
 
     responseObserver.onNext(memory);
@@ -59,7 +56,7 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
 
   @Override
   public void getMemory(GetMemoryRequest request, StreamObserver<Memory> responseObserver) {
-    logger.info("Getting memory: " + bytesToHex(request.getMemoryId().toByteArray()));
+    Logger.info("Getting memory: {}", Uuids.bytesToHex(request.getMemoryId()));
 
     // TODO: Validate memory ID
     // TODO: Retrieve from database
@@ -69,7 +66,7 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
     Memory memory =
         Memory.newBuilder()
             .setMemoryId(request.getMemoryId())
-            .setSpaceId(getBytesFromUUID(UUID.randomUUID()))
+            .setSpaceId(Uuids.getBytesFromUUID(UUID.randomUUID()))
             .setOriginalContentRef("s3://example-bucket/content.txt")
             .setContentType("text/plain")
             .putMetadata("source", "example-source")
@@ -77,8 +74,8 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
             .setProcessingStatus("COMPLETED")
             .setCreatedAt(getCurrentTimestamp())
             .setUpdatedAt(getCurrentTimestamp())
-            .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
-            .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
+            .setCreatedById(Uuids.getBytesFromUUID(UUID.randomUUID()))
+            .setUpdatedById(Uuids.getBytesFromUUID(UUID.randomUUID()))
             .build();
 
     responseObserver.onNext(memory);
@@ -88,7 +85,7 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
   @Override
   public void listMemories(
       ListMemoriesRequest request, StreamObserver<ListMemoriesResponse> responseObserver) {
-    logger.info("Listing memories in space: " + bytesToHex(request.getSpaceId().toByteArray()));
+    Logger.info("Listing memories in space: {}", Uuids.bytesToHex(request.getSpaceId()));
 
     // TODO: Validate space ID
     // TODO: Check permissions
@@ -98,7 +95,7 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
     // For now, return dummy data
     Memory dummyMemory =
         Memory.newBuilder()
-            .setMemoryId(getBytesFromUUID(UUID.randomUUID()))
+            .setMemoryId(Uuids.getBytesFromUUID(UUID.randomUUID()))
             .setSpaceId(request.getSpaceId())
             .setOriginalContentRef("s3://example-bucket/content.txt")
             .setContentType("text/plain")
@@ -107,8 +104,8 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
             .setProcessingStatus("COMPLETED")
             .setCreatedAt(getCurrentTimestamp())
             .setUpdatedAt(getCurrentTimestamp())
-            .setCreatedById(getBytesFromUUID(UUID.randomUUID()))
-            .setUpdatedById(getBytesFromUUID(UUID.randomUUID()))
+            .setCreatedById(Uuids.getBytesFromUUID(UUID.randomUUID()))
+            .setUpdatedById(Uuids.getBytesFromUUID(UUID.randomUUID()))
             .build();
 
     ListMemoriesResponse response =
@@ -120,7 +117,7 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
 
   @Override
   public void deleteMemory(DeleteMemoryRequest request, StreamObserver<Empty> responseObserver) {
-    logger.info("Deleting memory: " + bytesToHex(request.getMemoryId().toByteArray()));
+    Logger.info("Deleting memory: {}", Uuids.bytesToHex(request.getMemoryId()));
 
     // TODO: Validate memory ID
     // TODO: Check permissions
@@ -134,24 +131,5 @@ public class MemoryServiceImpl extends MemoryServiceImplBase {
   private Timestamp getCurrentTimestamp() {
     Instant now = Instant.now();
     return Timestamp.newBuilder().setSeconds(now.getEpochSecond()).setNanos(now.getNano()).build();
-  }
-
-  private ByteString getBytesFromUUID(UUID uuid) {
-    ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
-    bb.putLong(uuid.getMostSignificantBits());
-    bb.putLong(uuid.getLeastSignificantBits());
-    return ByteString.copyFrom(bb.array());
-  }
-
-  private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
-
-  private String bytesToHex(byte[] bytes) {
-    char[] hexChars = new char[bytes.length * 2];
-    for (int j = 0; j < bytes.length; j++) {
-      int v = bytes[j] & 0xFF;
-      hexChars[j * 2] = HEX_ARRAY[v >>> 4];
-      hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
-    }
-    return new String(hexChars);
   }
 }
