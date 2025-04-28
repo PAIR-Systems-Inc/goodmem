@@ -792,12 +792,12 @@ public class Main {
       var result = operation.execute();
 
       if (!result.isSuccess()) {
-        Logger.error("System initialization failed: {}", result.getErrorMessage());
-        ctx.status(500).json(Map.of("error", result.getErrorMessage()));
+        Logger.error("System initialization failed: {}", result.errorMessage());
+        ctx.status(500).json(Map.of("error", result.errorMessage()));
         return;
       }
 
-      if (result.isAlreadyInitialized()) {
+      if (result.initialized()) {
         Logger.info("System is already initialized");
         ctx.status(200)
             .json(Map.of("initialized", true, "message", "System is already initialized"));
@@ -811,8 +811,8 @@ public class Main {
               Map.of(
                   "initialized", true,
                   "message", "System initialized successfully",
-                  "root_api_key", result.getApiKey(),
-                  "user_id", result.getUserId().toString()));
+                  "root_api_key", result.apiKey(),
+                  "user_id", result.userId().toString()));
 
     } catch (Exception e) {
       Logger.error(e, "Error during system initialization.");

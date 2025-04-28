@@ -33,9 +33,10 @@ dependencies {
     implementation("javax.annotation:javax.annotation-api:1.3.2")
     
     // Logging
-    implementation("org.slf4j:slf4j-simple:2.0.17")
+    implementation("org.slf4j:slf4j-api:2.0.17")
     implementation("org.tinylog:tinylog-api:2.7.0")
     implementation("org.tinylog:tinylog-impl:2.7.0")
+    implementation("org.tinylog:slf4j-tinylog:2.7.0")
     
     // Database
     implementation("org.postgresql:postgresql:42.7.3")

@@ -22,10 +22,10 @@ class SystemInitOperationTest {
         
         // Assert
         assertTrue(result.isSuccess());
-        assertTrue(result.isAlreadyInitialized());
-        assertNull(result.getApiKey());
-        assertNull(result.getUserId());
-        assertNull(result.getErrorMessage());
+        assertTrue(result.initialized());
+        assertNull(result.apiKey());
+        assertNull(result.userId());
+        assertNull(result.errorMessage());
     }
     
     @Test
@@ -39,10 +39,10 @@ class SystemInitOperationTest {
         
         // Assert
         assertTrue(result.isSuccess());
-        assertFalse(result.isAlreadyInitialized());
-        assertEquals(apiKey, result.getApiKey());
-        assertEquals(userId, result.getUserId());
-        assertNull(result.getErrorMessage());
+        assertFalse(result.initialized());
+        assertEquals(apiKey, result.apiKey());
+        assertEquals(userId, result.userId());
+        assertNull(result.errorMessage());
     }
     
     @Test
@@ -55,9 +55,9 @@ class SystemInitOperationTest {
         
         // Assert
         assertFalse(result.isSuccess());
-        assertFalse(result.isAlreadyInitialized());
-        assertNull(result.getApiKey());
-        assertNull(result.getUserId());
-        assertEquals(errorMessage, result.getErrorMessage());
+        assertFalse(result.initialized());
+        assertNull(result.apiKey());
+        assertNull(result.userId());
+        assertEquals(errorMessage, result.errorMessage());
     }
 }

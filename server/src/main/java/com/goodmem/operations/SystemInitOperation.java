@@ -1,25 +1,23 @@
 package com.goodmem.operations;
 
-import com.goodmem.common.status.Status;
 import com.goodmem.common.status.StatusOr;
 import com.goodmem.db.ApiKey;
 import com.goodmem.db.ApiKeys;
 import com.goodmem.db.User;
 import com.goodmem.db.Users;
+import org.tinylog.Logger;
 
 import java.sql.Connection;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.logging.Logger;
 
 /**
  * Operation class for initializing the system.
  * This creates a root user and API key when the system is first set up.
  */
 public class SystemInitOperation {
-    private static final Logger logger = Logger.getLogger(SystemInitOperation.class.getName());
     private final Connection dbConnection;
 
     /**
@@ -34,25 +32,14 @@ public class SystemInitOperation {
     /**
      * Result of the system initialization operation.
      */
-    public static class InitResult {
-        private final boolean alreadyInitialized;
-        private final String apiKey;
-        private final UUID userId;
-        private final String errorMessage;
+    public record InitResult(boolean alreadyInitialized, String apiKey, UUID userId, String errorMessage) {
 
-        private InitResult(boolean alreadyInitialized, String apiKey, UUID userId, String errorMessage) {
-            this.alreadyInitialized = alreadyInitialized;
-            this.apiKey = apiKey;
-            this.userId = userId;
-            this.errorMessage = errorMessage;
+        public static InitResult success(String apiKey, UUID userId) {
+            return new InitResult(false, apiKey, userId, null);
         }
 
         public static InitResult alreadyInitialized() {
             return new InitResult(true, null, null, null);
-        }
-
-        public static InitResult success(String apiKey, UUID userId) {
-            return new InitResult(false, apiKey, userId, null);
         }
 
         public static InitResult error(String errorMessage) {
@@ -61,22 +48,6 @@ public class SystemInitOperation {
 
         public boolean isSuccess() {
             return errorMessage == null;
-        }
-
-        public boolean isAlreadyInitialized() {
-            return alreadyInitialized;
-        }
-
-        public String getApiKey() {
-            return apiKey;
-        }
-
-        public UUID getUserId() {
-            return userId;
-        }
-
-        public String getErrorMessage() {
-            return errorMessage;
         }
     }
 
@@ -87,20 +58,19 @@ public class SystemInitOperation {
      * @return the initialization result
      */
     public InitResult execute() {
-        logger.info("Executing system initialization operation");
+        Logger.info("Executing system initialization operation");
 
         try {
             // Check if 'root' user already exists
             StatusOr<Optional<User>> rootUserOr = Users.loadByUsername(dbConnection, "root");
             if (rootUserOr.isNotOk()) {
-                String error = "Failed to check for root user: " + rootUserOr.getStatus().getMessage();
-                logger.severe(error);
-                return InitResult.error(error);
+                Logger.error("Failed to check for root user: {}", rootUserOr.getStatus().getMessage());
+                return InitResult.error("Root user lookup failed.");
             }
 
             // If root user exists, return "already initialized" result
             if (rootUserOr.getValue().isPresent()) {
-                logger.info("System is already initialized");
+                Logger.info("System is already initialized");
                 return InitResult.alreadyInitialized();
             }
 
@@ -111,7 +81,7 @@ public class SystemInitOperation {
             User rootUser = new User(
                     rootUserId,
                     "root",
-                    "root@example.com",
+                    "root@goodmem.ai",
                     "System Root User",
                     now,
                     now
@@ -119,9 +89,8 @@ public class SystemInitOperation {
 
             StatusOr<Integer> saveUserOr = Users.save(dbConnection, rootUser);
             if (saveUserOr.isNotOk()) {
-                String error = "Failed to create root user: " + saveUserOr.getStatus().getMessage();
-                logger.severe(error);
-                return InitResult.error(error);
+                Logger.error("Failed to create root user: {}", saveUserOr.getStatus().getMessage());
+                return InitResult.error("Failed to create root user.");
             }
 
             // Create an API key for the root user

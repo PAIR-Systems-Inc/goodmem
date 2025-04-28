@@ -67,23 +67,23 @@ public class UserServiceImpl extends UserServiceImplBase {
       SystemInitOperation.InitResult result = operation.execute();
 
       if (!result.isSuccess()) {
-        Logger.error("System initialization failed: {}", result.getErrorMessage());
+        Logger.error("System initialization failed: {}", result.errorMessage());
         responseObserver.onError(Status.INTERNAL
-            .withDescription("System initialization failed: " + result.getErrorMessage())
+            .withDescription("System initialization failed: " + result.errorMessage())
             .asRuntimeException());
         return;
       }
 
       InitializeSystemResponse.Builder responseBuilder = InitializeSystemResponse.newBuilder()
-          .setAlreadyInitialized(result.isAlreadyInitialized())
-          .setMessage(result.isAlreadyInitialized() 
+          .setAlreadyInitialized(result.initialized())
+          .setMessage(result.initialized()
               ? "System is already initialized" 
               : "System initialized successfully");
       
-      if (!result.isAlreadyInitialized() && result.getUserId() != null) {
+      if (!result.initialized() && result.userId() != null) {
         responseBuilder
-            .setRootApiKey(result.getApiKey())
-            .setUserId(Uuids.getBytesFromUUID(result.getUserId()));
+            .setRootApiKey(result.apiKey())
+            .setUserId(Uuids.getBytesFromUUID(result.userId()));
       }
       
       responseObserver.onNext(responseBuilder.build());
@@ -92,7 +92,7 @@ public class UserServiceImpl extends UserServiceImplBase {
     } catch (SQLException e) {
       Logger.error(e, "Database connection error during system initialization.");
       responseObserver.onError(Status.INTERNAL
-          .withDescription("Database connection error: " + e.getMessage())
+          .withDescription("Unexpected error: " + e.getMessage())
           .asRuntimeException());
     } catch (Exception e) {
       Logger.error(e, "Unexpected error during system initialization.");
