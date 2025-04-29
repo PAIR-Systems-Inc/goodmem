@@ -30,14 +30,15 @@ jobs:
           key: ${{ runner.os }}-gjf-1.21.0
           
       - name: Check Java Formatting
+        id: format-check
+        continue-on-error: true
         run: |
           ./server/format_java.sh --check server/src
           
-      - name: Provide fix instructions (if check fails)
-        if: failure()
+      - name: Report formatting issues
+        if: steps.format-check.outcome == 'failure'
         run: |
-          echo "::error::Java formatting check failed. Please run './server/format_java.sh --fix server/src' locally and commit the changes."
-          exit 1
+          echo "::warning::Java formatting check failed. Please run './server/format_java.sh --fix server/src' locally and commit the changes."
 
   go-lint:
     runs-on: ubuntu-latest

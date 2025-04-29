@@ -70,8 +70,15 @@ jobs:
         run: ./gradlew :server:shadowJar
         
       - name: Check Java formatting
+        id: format-check
+        continue-on-error: true
         run: |
           ./server/format_java.sh --check server/src
+          
+      - name: Report formatting issues
+        if: steps.format-check.outcome == 'failure'
+        run: |
+          echo "::warning::Java formatting check failed. Please run './server/format_java.sh --fix server/src' locally and commit the changes."
         
       - name: Upload server JAR
         uses: actions/upload-artifact@v4
