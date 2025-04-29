@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.google.protobuf.ByteString;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,11 +34,9 @@ import org.testcontainers.utility.MountableFile;
 @Testcontainers
 public class ApiKeysTest {
 
-  // Setup paths to the schema files
-  private static final String PROJECT_ROOT = "/home/amin/clients/wsl_pairsys/goodmem";
-  private static final String EXTENSIONS_SQL_PATH =
-      PROJECT_ROOT + "/database/initdb/00-extensions.sql";
-  private static final String SCHEMA_SQL_PATH = PROJECT_ROOT + "/database/initdb/01-schema.sql";
+  // Setup paths to the schema files - use relative paths from project root
+  private static final String EXTENSIONS_SQL_PATH = "../database/initdb/00-extensions.sql";
+  private static final String SCHEMA_SQL_PATH = "../database/initdb/01-schema.sql";
 
   @Container
   private static final PostgreSQLContainer<?> postgres =
@@ -93,8 +93,10 @@ public class ApiKeysTest {
   @Test
   void testLoadAll_ReturnsAllApiKeys_WhenMultipleExist() {
     // Given: Multiple API keys in the database
-    ApiKey key1 = createTestApiKey("prf1", "hash1", "ACTIVE");
-    ApiKey key2 = createTestApiKey("prf2", "hash2", "INACTIVE");
+    ByteString hash1 = randomBytes();
+    ByteString hash2 = randomBytes();
+    ApiKey key1 = createTestApiKey("prf1", hash1, "ACTIVE");
+    ApiKey key2 = createTestApiKey("prf2", hash2, "INACTIVE");
 
     ApiKeys.save(connection, key1);
     ApiKeys.save(connection, key2);
@@ -115,7 +117,8 @@ public class ApiKeysTest {
   @Test
   void testLoadById_ReturnsApiKey_WhenExists() {
     // Given: An API key in the database
-    ApiKey key = createTestApiKey("testkey", "testhash", "ACTIVE"); // 7 chars
+    ByteString uniqueHash = randomBytes();
+    ApiKey key = createTestApiKey("testkey", uniqueHash, "ACTIVE"); // 7 chars
     ApiKeys.save(connection, key);
 
     // When: We load the API key by ID
@@ -145,8 +148,10 @@ public class ApiKeysTest {
   @Test
   void testLoadByUserId_ReturnsApiKeys_WhenExistForUser() {
     // Given: Multiple API keys for the same user
-    ApiKey key1 = createTestApiKey("usrkey1", "usrhash1", "ACTIVE"); // 7 chars
-    ApiKey key2 = createTestApiKey("usrkey2", "usrhash2", "INACTIVE"); // 7 chars
+    ByteString hash1 = randomBytes();
+    ByteString hash2 = randomBytes();
+    ApiKey key1 = createTestApiKey("usrkey1", hash1, "ACTIVE"); // 7 chars
+    ApiKey key2 = createTestApiKey("usrkey2", hash2, "INACTIVE"); // 7 chars
 
     ApiKeys.save(connection, key1);
     ApiKeys.save(connection, key2);
@@ -166,24 +171,29 @@ public class ApiKeysTest {
 
   @Test
   void testLoadByKeyHash_ReturnsApiKey_WhenExists() {
+    ByteString uniqueHash = randomBytes();
+
     // Given: An API key with a specific hash
-    ApiKey key = createTestApiKey("hashkey", "uniquehash", "ACTIVE"); // 7 chars
+    ApiKey key = createTestApiKey("test_prefix", uniqueHash, "ACTIVE"); // 7 chars
     ApiKeys.save(connection, key);
 
     // When: We load the API key by hash
-    StatusOr<Optional<ApiKey>> result = ApiKeys.loadByKeyHash(connection, "uniquehash");
+    StatusOr<Optional<ApiKey>> result = ApiKeys.loadByKeyHash(connection, uniqueHash);
 
     // Then: The API key is returned
     assertTrue(result.isOk());
     assertTrue(result.getValue().isPresent());
-    assertEquals("hashkey", result.getValue().get().keyPrefix());
+    assertEquals("test_prefix", result.getValue().get().keyPrefix());
     assertEquals(key.apiKeyId(), result.getValue().get().apiKeyId());
   }
 
   @Test
   void testLoadByKeyHash_ReturnsEmpty_WhenHashDoesNotExist() {
+    // Generate a random hash that won't exist in the database
+    ByteString nonExistentHash = randomBytes();
+    
     // When: We try to load an API key with a non-existent hash
-    StatusOr<Optional<ApiKey>> result = ApiKeys.loadByKeyHash(connection, "nonexistenthash");
+    StatusOr<Optional<ApiKey>> result = ApiKeys.loadByKeyHash(connection, nonExistentHash);
 
     // Then: The operation succeeds but returns an empty Optional
     assertTrue(result.isOk());
@@ -193,7 +203,8 @@ public class ApiKeysTest {
   @Test
   void testSave_CreatesNewApiKey_WhenIdDoesNotExist() {
     // Given: A new API key
-    ApiKey key = createTestApiKey("newkey", "newhash", "ACTIVE"); // 6 chars
+    ByteString uniqueHash = randomBytes();
+    ApiKey key = createTestApiKey("newkey", uniqueHash, "ACTIVE"); // 6 chars
 
     // When: We save the API key
     StatusOr<Integer> result = ApiKeys.save(connection, key);
@@ -211,7 +222,8 @@ public class ApiKeysTest {
   @Test
   void testSave_UpdatesExistingApiKey_WhenIdExists() {
     // Given: An existing API key
-    ApiKey key = createTestApiKey("updatekey", "updatehash", "ACTIVE"); // 9 chars
+    ByteString uniqueHash = randomBytes();
+    ApiKey key = createTestApiKey("updatekey", uniqueHash, "ACTIVE"); // 9 chars
     ApiKeys.save(connection, key);
 
     // When: We update the API key
@@ -262,8 +274,9 @@ public class ApiKeysTest {
 
     // Given: An existing API key
     System.out.println("Creating new test API key...");
+    ByteString uniqueHash = randomBytes();
     ApiKey key =
-        createTestApiKey("lastused", "lastused", "ACTIVE"); // Key prefix must be <= 10 chars
+        createTestApiKey("lastused", uniqueHash, "ACTIVE"); // Key prefix must be <= 10 chars
     System.out.println("API Key created with ID: " + key.apiKeyId());
 
     // Let's verify the database schema
@@ -370,8 +383,9 @@ public class ApiKeysTest {
   @Test
   void testUpdateStatus_UpdatesStatus_WhenApiKeyExists() {
     // Given: An existing API key
+    ByteString uniqueHash = randomBytes();
     ApiKey key =
-        createTestApiKey("status", "statushash", "ACTIVE"); // Changed from statuskey (10 chars max)
+        createTestApiKey("status", uniqueHash, "ACTIVE"); // Changed from statuskey (10 chars max)
     ApiKeys.save(connection, key);
 
     // When: We update the status
@@ -392,8 +406,9 @@ public class ApiKeysTest {
   @Test
   void testDelete_RemovesApiKey_WhenExists() {
     // Given: An existing API key
+    ByteString uniqueHash = randomBytes();
     ApiKey key =
-        createTestApiKey("delete", "deletehash", "ACTIVE"); // Changed from deletekey (10 chars max)
+        createTestApiKey("delete", uniqueHash, "ACTIVE"); // Changed from deletekey (10 chars max)
     ApiKeys.save(connection, key);
 
     // When: We delete the API key
@@ -461,7 +476,14 @@ public class ApiKeysTest {
     return userId;
   }
 
-  private ApiKey createTestApiKey(String prefix, String hash, String status) {
+
+  private ByteString randomBytes() {
+    byte[] bytes = new byte[16];
+    new java.security.SecureRandom().nextBytes(bytes);
+    return ByteString.copyFrom(bytes);
+  }
+
+  private ApiKey createTestApiKey(String prefix, ByteString hash, String status) {
     UUID apiKeyId = UUID.randomUUID();
     Instant now = Instant.now();
 

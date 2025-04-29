@@ -7,6 +7,8 @@ import com.goodmem.db.util.UuidUtil;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+
+import com.google.protobuf.ByteString;
 import org.junit.jupiter.api.Test;
 
 /** Tests for record-to-proto conversions. */
@@ -88,7 +90,7 @@ public class RecordConverterTest {
             apiKeyId,
             userId,
             "sk_test_",
-            "hashedvalue",
+            ByteString.copyFrom(new byte[16]),
             "ACTIVE",
             Map.of("purpose", "test"),
             expiresAt,

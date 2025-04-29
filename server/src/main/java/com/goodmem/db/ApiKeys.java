@@ -131,7 +131,7 @@ public final class ApiKeys {
    * @return StatusOr containing an Optional ApiKey or an error
    */
   @Nonnull
-  public static StatusOr<Optional<ApiKey>> loadByKeyHash(Connection conn, String keyHash) {
+  public static StatusOr<Optional<ApiKey>> loadByKeyHash(Connection conn, ByteString keyHash) {
     String sql =
         """
         SELECT api_key_id, user_id, key_prefix, key_hash, status, labels,
@@ -141,7 +141,7 @@ public final class ApiKeys {
          WHERE key_hash = ?
         """;
     try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, keyHash);
+      stmt.setBytes(1, keyHash.toByteArray());
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
           StatusOr<ApiKey> apiKeyOr = extractApiKey(rs);

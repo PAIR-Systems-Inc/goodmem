@@ -17,11 +17,11 @@ class SystemInitOperationTest {
   @Test
   void testInitResultAlreadyInitialized() {
     // Arrange & Act
-    InitResult result = InitResult.alreadyInitialized();
+    InitResult result = InitResult.initialized();
 
     // Assert
     assertTrue(result.isSuccess());
-    assertTrue(result.initialized());
+    assertTrue(result.alreadyInitialized());
     assertNull(result.apiKey());
     assertNull(result.userId());
     assertNull(result.errorMessage());
@@ -38,7 +38,7 @@ class SystemInitOperationTest {
 
     // Assert
     assertTrue(result.isSuccess());
-    assertFalse(result.initialized());
+    assertFalse(result.alreadyInitialized());
     assertEquals(apiKey, result.apiKey());
     assertEquals(userId, result.userId());
     assertNull(result.errorMessage());
@@ -54,7 +54,7 @@ class SystemInitOperationTest {
 
     // Assert
     assertFalse(result.isSuccess());
-    assertFalse(result.initialized());
+    assertFalse(result.alreadyInitialized());
     assertNull(result.apiKey());
     assertNull(result.userId());
     assertEquals(errorMessage, result.errorMessage());
