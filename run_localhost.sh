@@ -23,6 +23,7 @@
 #   ./run_localhost.sh                 # Start all services
 #   ./run_localhost.sh --exclude-server # Start dependencies only (for IDE development)
 #   ./run_localhost.sh --exclude-ui    # Start without the UI container
+#   ./run_localhost.sh --reinit-db     # Reinitialize the database (destroys all data)
 #   ./run_localhost.sh --help          # Show help message
 #
 # After changing the config/local_dev.env file, run ./config/update_intellij_config.sh
@@ -35,6 +36,7 @@ set -e
 EXCLUDE_SERVER=false
 EXCLUDE_UI=false
 SHOW_HELP=false
+REINIT_DB=false
 
 # Process command-line options
 while [[ $# -gt 0 ]]; do
@@ -45,6 +47,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --exclude-ui)
       EXCLUDE_UI=true
+      shift
+      ;;
+    --reinit-db)
+      REINIT_DB=true
       shift
       ;;
     --help|-h)
@@ -67,6 +73,8 @@ if [[ "$SHOW_HELP" == "true" ]]; then
   echo "  --exclude-server   Start dependencies only (DB, MinIO) without the server"
   echo "                     Use this when running the server from IDE/IntelliJ"
   echo "  --exclude-ui       Start without the UI container"
+  echo "  --reinit-db        Reinitialize the database (WARNING: destroys all data)"
+  echo "                     Use this after schema changes to recreate the database"
   echo "  --help, -h         Show this help message"
   echo ""
   exit 0
@@ -99,6 +107,43 @@ mkdir -p "${DATA_DIR_BASE}/minio_data"
 echo "Data directories ready."
 echo ""
 
+# --- Handle Database Reinitialization if requested ---
+if [[ "$REINIT_DB" == "true" ]]; then
+  echo "WARNING: Database reinitialization requested!"
+  echo "This will delete all data in the database and recreate the schema."
+  echo ""
+  read -p "Are you sure you want to continue? [y/N] " -n 1 -r
+  echo ""
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "Stopping existing containers..."
+    docker compose down
+    
+    echo "Removing database data directory..."
+    echo "This may require sudo privileges to remove the PostgreSQL data directory."
+    
+    if [ -d "${DATA_DIR_BASE}/pgdata" ]; then
+      # Check if we can write to the directory directly
+      if [ -w "${DATA_DIR_BASE}/pgdata" ]; then
+        rm -rf "${DATA_DIR_BASE}/pgdata"
+      else
+        # Try with sudo if direct removal fails
+        echo "Using sudo to remove PostgreSQL data directory..."
+        sudo rm -rf "${DATA_DIR_BASE}/pgdata"
+      fi
+    fi
+    
+    # Create fresh directory with current user ownership
+    mkdir -p "${DATA_DIR_BASE}/pgdata"
+    
+    echo "Database directory cleared. The database will be recreated on startup."
+    echo ""
+  else
+    echo "Database reinitialization cancelled."
+    echo ""
+    REINIT_DB=false
+  fi
+fi
+
 # --- Start Docker Compose ---
 echo "Starting Docker Compose stack..."
 echo "Using configuration:"
@@ -107,6 +152,9 @@ echo "  Postgres User:  $POSTGRES_USER"
 echo "  Postgres DB:    $POSTGRES_DB"
 echo "  MinIO Key:      $MINIO_ACCESS_KEY"
 echo "  MinIO Bucket:   $MINIO_BUCKET_NAME"
+if [[ "$REINIT_DB" == "true" ]]; then
+  echo "  Database:      REINITIALIZED (all data destroyed)"
+fi
 echo ""
 
 # Determine which services to include/exclude

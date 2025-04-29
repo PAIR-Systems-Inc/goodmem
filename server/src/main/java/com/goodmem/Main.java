@@ -797,7 +797,7 @@ public class Main {
         return;
       }
 
-      if (result.initialized()) {
+      if (result.alreadyInitialized()) {
         Logger.info("System is already initialized");
         ctx.status(200)
             .json(Map.of("initialized", true, "message", "System is already initialized"));
