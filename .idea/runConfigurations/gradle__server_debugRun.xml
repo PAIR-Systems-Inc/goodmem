@@ -1,0 +1,35 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="gradle :server:debugRun" type="GradleRunConfiguration" factoryName="Gradle" show_console_on_std_err="true" show_console_on_std_out="true">
+    <ExternalSystemSettings>
+      <option name="env">
+        <map>
+          <entry key="DB_PASSWORD" value="ayk317gk" />
+          <entry key="DB_URL" value="jdbc:postgresql://localhost:5432/goodmem_db" />
+          <entry key="DB_USER" value="goodmem_admin" />
+          <entry key="MINIO_ACCESS_KEY" value="minio_goodmem" />
+          <entry key="MINIO_BUCKET" value="goodmem-content" />
+          <entry key="MINIO_ENDPOINT" value="http://localhost:9000" />
+          <entry key="MINIO_SECRET_KEY" value="frkefi2b" />
+        </map>
+      </option>
+      <option name="executionName" />
+      <option name="externalProjectPath" value="$PROJECT_DIR$" />
+      <option name="externalSystemIdString" value="GRADLE" />
+      <option name="scriptParameters" value="" />
+      <option name="taskDescriptions">
+        <list />
+      </option>
+      <option name="taskNames">
+        <list>
+          <option value=":server:debugRun" />
+        </list>
+      </option>
+      <option name="vmOptions" />
+    </ExternalSystemSettings>
+    <ExternalSystemDebugServerProcess>true</ExternalSystemDebugServerProcess>
+    <ExternalSystemReattachDebugProcess>true</ExternalSystemReattachDebugProcess>
+    <DebugAllEnabled>false</DebugAllEnabled>
+    <RunAsTest>false</RunAsTest>
+    <method v="2" />
+  </configuration>
+</component>
