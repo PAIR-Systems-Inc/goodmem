@@ -224,13 +224,16 @@ public class Main {
         "TLS enabled for gRPC server with: Certificate {}, Private key {}",
         serverCrt, serverKey);
 
+    // Create a shared AuthInterceptor instance
+    var authInterceptor = new AuthInterceptor(dataSource);
+    
     grpcServer =
         Grpc.newServerBuilderForPort(GRPC_PORT, credentials)
-            .addService(ServerInterceptors.intercept(spaceServiceImpl, new AuthInterceptor()))
+            .addService(ServerInterceptors.intercept(spaceServiceImpl, authInterceptor))
             // For user service, we need to allow InitializeSystem to be called without auth
-            .addService(ServerInterceptors.intercept(userServiceImpl, new ConditionalAuthInterceptor(initMethodAuthorizer)))
-            .addService(ServerInterceptors.intercept(memoryServiceImpl, new AuthInterceptor()))
-            .addService(ServerInterceptors.intercept(apiKeyServiceImpl, new AuthInterceptor()))
+            .addService(ServerInterceptors.intercept(userServiceImpl, new ConditionalAuthInterceptor(initMethodAuthorizer, authInterceptor)))
+            .addService(ServerInterceptors.intercept(memoryServiceImpl, authInterceptor))
+            .addService(ServerInterceptors.intercept(apiKeyServiceImpl, authInterceptor))
             .addService(ProtoReflectionServiceV1.newInstance())
             .build()
             .start();

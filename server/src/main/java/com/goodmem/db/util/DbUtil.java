@@ -59,13 +59,27 @@ public final class DbUtil {
     return Instant.ofEpochMilli(Timestamps.toMillis(timestamp));
   }
 
-  /** Gets a UUID from a ResultSet column. */
+  /** Gets a UUID from a ResultSet column using column name. */
   @Nonnull
   public static StatusOr<UUID> getUuid(ResultSet rs, String columnName) {
     try {
       UUID uuid = rs.getObject(columnName, UUID.class);
       if (rs.wasNull() || uuid == null) {
         return StatusOr.ofStatus(Status.invalidArgument("Column " + columnName + " is null"));
+      }
+      return StatusOr.ofValue(uuid);
+    } catch (SQLException e) {
+      return StatusOr.ofStatus(Status.internal("Failed to get UUID: " + e.getMessage(), e));
+    }
+  }
+  
+  /** Gets a UUID from a ResultSet column using column index. */
+  @Nonnull
+  public static StatusOr<UUID> getUuid(ResultSet rs, String columnName, int columnIndex) {
+    try {
+      UUID uuid = rs.getObject(columnIndex, UUID.class);
+      if (rs.wasNull() || uuid == null) {
+        return StatusOr.ofStatus(Status.invalidArgument("Column " + columnName + " at index " + columnIndex + " is null"));
       }
       return StatusOr.ofValue(uuid);
     } catch (SQLException e) {
@@ -89,13 +103,27 @@ public final class DbUtil {
     }
   }
 
-  /** Gets an Instant from a ResultSet column. */
+  /** Gets an Instant from a ResultSet column using column name. */
   @Nonnull
   public static StatusOr<Instant> getInstant(ResultSet rs, String columnName) {
     try {
       java.sql.Timestamp timestamp = rs.getTimestamp(columnName);
       if (rs.wasNull() || timestamp == null) {
         return StatusOr.ofStatus(Status.invalidArgument("Column " + columnName + " is null"));
+      }
+      return StatusOr.ofValue(timestamp.toInstant());
+    } catch (SQLException e) {
+      return StatusOr.ofStatus(Status.internal("Failed to get Instant: " + e.getMessage(), e));
+    }
+  }
+  
+  /** Gets an Instant from a ResultSet column using column index. */
+  @Nonnull
+  public static StatusOr<Instant> getInstant(ResultSet rs, String columnName, int columnIndex) {
+    try {
+      java.sql.Timestamp timestamp = rs.getTimestamp(columnIndex);
+      if (rs.wasNull() || timestamp == null) {
+        return StatusOr.ofStatus(Status.invalidArgument("Column " + columnName + " at index " + columnIndex + " is null"));
       }
       return StatusOr.ofValue(timestamp.toInstant());
     } catch (SQLException e) {
