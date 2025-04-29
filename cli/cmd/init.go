@@ -232,7 +232,13 @@ func createHTTPClient(insecure bool, serverAddr string) *http.Client {
         TLSClientConfig:    tlsCfg,
         ForceAttemptHTTP2:  true,
     }
-    http2.ConfigureTransport(transport)
+    if err := http2.ConfigureTransport(transport); err != nil {
+        return &http.Client{
+            Timeout: 30 * time.Second,
+            // Fall back to standard HTTP/1.1 if HTTP/2 configuration fails
+            Transport: transport,
+        }
+    }
 
     return &http.Client{
         Timeout:   30 * time.Second,
