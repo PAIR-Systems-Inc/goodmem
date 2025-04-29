@@ -64,7 +64,4 @@ var getUserCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(userCmd)
 	userCmd.AddCommand(getUserCmd)
-
-	// Global flags for all user commands
-	userCmd.PersistentFlags().StringVar(&serverAddress, "server", "http://localhost:9090", "GoodMem server address (gRPC API)")
 }

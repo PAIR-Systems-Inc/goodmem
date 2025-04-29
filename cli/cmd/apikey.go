@@ -219,9 +219,6 @@ func init() {
 	apikeyCmd.AddCommand(updateApiKeyCmd)
 	apikeyCmd.AddCommand(deleteApiKeyCmd)
 
-	// Global flags for all apikey commands
-	apikeyCmd.PersistentFlags().StringVar(&serverAddress, "server", "http://localhost:9090", "GoodMem server address (gRPC API)")
-
 	// Flags for create
 	createApiKeyCmd.Flags().StringSliceVar(&apiKeyLabels, "label", []string{}, "Labels in key=value format (can be specified multiple times)")
 

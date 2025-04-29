@@ -13,7 +13,6 @@ import (
 )
 
 var (
-	serverAddress string
 	spaceName     string
 	publicRead    bool
 	labels        []string
@@ -267,9 +266,6 @@ func init() {
 	spaceCmd.AddCommand(listSpacesCmd)
 	spaceCmd.AddCommand(updateSpaceCmd)
 	spaceCmd.AddCommand(deleteSpaceCmd)
-
-	// Global flags for all space commands
-	spaceCmd.PersistentFlags().StringVar(&serverAddress, "server", "http://localhost:9090", "GoodMem server address (gRPC API)")
 
 	// Flags for create
 	createSpaceCmd.Flags().StringVar(&spaceName, "name", "", "Name of the space")

@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/bufbuild/connect-go"
@@ -210,27 +212,34 @@ func writeConfigFile(path string, config ConfigFile) error {
 // createHTTPClient creates an HTTP client with proper HTTP/2 configuration
 // This is critical for gRPC operations to work correctly
 func createHTTPClient(insecure bool, serverAddr string) *http.Client {
-	// Create transport with HTTP/2 enabled
-	transport := &http.Transport{
-		ForceAttemptHTTP2: true, // Explicitly enable HTTP/2
-	}
-	
-	// Configure TLS if needed
-	if insecure || (len(serverAddr) >= 5 && serverAddr[:5] == "https") {
-		transport.TLSClientConfig = &tls.Config{
-			InsecureSkipVerify: true, // For development only
-		}
-	}
-	
-	// Apply HTTP/2 settings - this is critical for gRPC to work properly
-	http2.ConfigureTransports(transport)
-	
-	// Create and return the client
-	return &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: transport,
-	}
+    // Plain HTTP? -> use an h2c transport
+    if strings.HasPrefix(serverAddr, "http://") {
+        h2cTransport := &http2.Transport{
+            AllowHTTP: true,
+            DialTLS: func(network, addr string, _ *tls.Config) (net.Conn, error) {
+                return net.Dial(network, addr) // plain TCP, no TLS
+            },
+        }
+        return &http.Client{
+            Timeout:   30 * time.Second,
+            Transport: h2cTransport,
+        }
+    }
+
+    // HTTPS -> regular transport with (optional) insecure TLS
+    tlsCfg := &tls.Config{InsecureSkipVerify: insecure} //nolint:gosec
+    transport := &http.Transport{
+        TLSClientConfig:    tlsCfg,
+        ForceAttemptHTTP2:  true,
+    }
+    http2.ConfigureTransport(transport)
+
+    return &http.Client{
+        Timeout:   30 * time.Second,
+        Transport: transport,
+    }
 }
+
 
 func init() {
 	rootCmd.AddCommand(initCmd)

@@ -201,9 +201,6 @@ func init() {
 	memoryCmd.AddCommand(listMemoriesCmd)
 	memoryCmd.AddCommand(deleteMemoryCmd)
 
-	// Global flags for all memory commands
-	memoryCmd.PersistentFlags().StringVar(&serverAddress, "server", "http://localhost:9090", "GoodMem server address")
-
 	// Flags for create
 	createMemoryCmd.Flags().StringVar(&spaceID, "space-id", "", "ID of the space to create the memory in")
 	createMemoryCmd.Flags().StringVar(&originalContentRef, "content-ref", "", "Reference to the original content")
