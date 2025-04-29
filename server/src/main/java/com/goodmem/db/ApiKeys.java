@@ -156,6 +156,94 @@ public final class ApiKeys {
       return StatusOr.ofException(e);
     }
   }
+  
+  /**
+   * Retrieves the user associated with an API key.
+   * This method performs a single join operation to retrieve both the API key and user information 
+   * in one database query for efficiency.
+   *
+   * @param conn an open JDBC connection
+   * @param rawApiKey the raw API key string (e.g., "gm_abc123")
+   * @return StatusOr containing an Optional with the UserWithApiKey record, or an error
+   */
+  @Nonnull
+  public static StatusOr<Optional<UserWithApiKey>> getUserByApiKey(
+      Connection conn, String rawApiKey) {
+    
+    // Hash the API key using the security.ApiKey utility method
+    StatusOr<ByteString> keyHashOr = com.goodmem.security.ApiKey.hashApiKeyString(rawApiKey);
+    if (keyHashOr.isNotOk()) {
+      // Return empty if API key format is invalid (don't expose internal error details)
+      return StatusOr.ofValue(Optional.empty());
+    }
+    
+    String sql =
+        """
+        SELECT a.api_key_id, a.user_id, a.key_prefix, a.key_hash, a.status, a.labels,
+               a.expires_at, a.last_used_at, a.created_at, a.updated_at,
+               a.created_by_id, a.updated_by_id,
+               u.user_id, u.username, u.email, u.display_name, u.created_at, u.updated_at
+          FROM apikey a
+          JOIN "user" u ON a.user_id = u.user_id
+         WHERE a.key_hash = ?
+           AND a.status = 'ACTIVE'
+           AND (a.expires_at IS NULL OR a.expires_at > now())
+        """;
+    
+    try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+      stmt.setBytes(1, keyHashOr.getValue().toByteArray());
+      try (ResultSet rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          // Extract API key
+          StatusOr<ApiKey> apiKeyOr = extractApiKey(rs);
+          if (apiKeyOr.isNotOk()) {
+            return StatusOr.ofStatus(apiKeyOr.getStatus());
+          }
+          
+          // Extract User (with offset column indexes since we're using a join)
+          StatusOr<UUID> userIdOr = DbUtil.getUuid(rs, "user_id", 13);
+          if (userIdOr.isNotOk()) {
+            return StatusOr.ofStatus(userIdOr.getStatus());
+          }
+          
+          String username = rs.getString(14);
+          String email = rs.getString(15);
+          String displayName = rs.getString(16);
+          
+          StatusOr<Instant> createdAtOr = DbUtil.getInstant(rs, "created_at", 17);
+          if (createdAtOr.isNotOk()) {
+            return StatusOr.ofStatus(createdAtOr.getStatus());
+          }
+          
+          StatusOr<Instant> updatedAtOr = DbUtil.getInstant(rs, "updated_at", 18);
+          if (updatedAtOr.isNotOk()) {
+            return StatusOr.ofStatus(updatedAtOr.getStatus());
+          }
+          
+          User user = new User(
+              userIdOr.getValue(),
+              username,
+              email,
+              displayName,
+              createdAtOr.getValue(),
+              updatedAtOr.getValue());
+          
+          // Update last_used_at timestamp asynchronously (don't block the response)
+          updateLastUsed(conn, apiKeyOr.getValue().apiKeyId(), Instant.now());
+          
+          return StatusOr.ofValue(Optional.of(new UserWithApiKey(user, apiKeyOr.getValue())));
+        }
+        return StatusOr.ofValue(Optional.empty());
+      }
+    } catch (SQLException e) {
+      return StatusOr.ofException(e);
+    }
+  }
+  
+  /**
+   * Record containing both a User and their associated ApiKey for API key-based retrieval.
+   */
+  public record UserWithApiKey(User user, ApiKey apiKey) {}
 
   /**
    * Inserts or updates an API key row (upsert).

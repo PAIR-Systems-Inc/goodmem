@@ -1,5 +1,6 @@
-package com.goodmem;
+package com.goodmem.security;
 
+import com.goodmem.MethodAuthorizer;
 import io.grpc.Context;
 import io.grpc.Contexts;
 import io.grpc.Metadata;
@@ -14,20 +15,19 @@ import java.util.logging.Logger;
  */
 public class ConditionalAuthInterceptor implements ServerInterceptor {
   private static final Logger logger = Logger.getLogger(ConditionalAuthInterceptor.class.getName());
-  private static final Metadata.Key<String> API_KEY_METADATA_KEY =
-      Metadata.Key.of("x-api-key", Metadata.ASCII_STRING_MARSHALLER);
-
-  public static final Context.Key<String> PRINCIPAL_ID_CONTEXT_KEY = AuthInterceptor.PRINCIPAL_ID_CONTEXT_KEY;
   
   private final MethodAuthorizer methodAuthorizer;
+  private final AuthInterceptor authInterceptor;
   
   /**
-   * Creates a new ConditionalAuthInterceptor with the specified method authorizer.
+   * Creates a new ConditionalAuthInterceptor with the specified method authorizer and auth interceptor.
    * 
    * @param methodAuthorizer the authorizer that determines which methods can bypass authentication
+   * @param authInterceptor the interceptor used for regular authentication
    */
-  public ConditionalAuthInterceptor(MethodAuthorizer methodAuthorizer) {
+  public ConditionalAuthInterceptor(MethodAuthorizer methodAuthorizer, AuthInterceptor authInterceptor) {
     this.methodAuthorizer = methodAuthorizer;
+    this.authInterceptor = authInterceptor;
   }
 
   @Override
@@ -41,22 +41,12 @@ public class ConditionalAuthInterceptor implements ServerInterceptor {
     if (methodAuthorizer.isMethodAllowed(fullMethodName)) {
       logger.info("Method " + fullMethodName + " allowed without authentication");
       
-      // For allowed methods, we set a special principal ID indicating no authentication
-      String principalId = "unauthenticated";
-      Context context = Context.current().withValue(PRINCIPAL_ID_CONTEXT_KEY, principalId);
-      return Contexts.interceptCall(context, call, headers, next);
+      // For allowed methods, we proceed without authentication
+      // We can set a null user or an "anonymous" user in the context if needed
+      return next.startCall(call, headers);
     }
     
-    // For all other methods, require authentication
-    String apiKey = headers.get(API_KEY_METADATA_KEY);
-    logger.info("API Key: " + (apiKey != null ? "present" : "absent"));
-
-    // Standard authentication logic, same as in AuthInterceptor
-    // TODO: Validate API key against authentication service
-    // TODO: Lookup or derive proper principal ID
-    String principalId = "user-123";
-
-    Context context = Context.current().withValue(PRINCIPAL_ID_CONTEXT_KEY, principalId);
-    return Contexts.interceptCall(context, call, headers, next);
+    // For all other methods, delegate to the regular auth interceptor
+    return authInterceptor.interceptCall(call, headers, next);
   }
 }
