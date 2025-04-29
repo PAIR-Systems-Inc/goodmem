@@ -118,7 +118,7 @@ public class ApiKeysTest {
   void testLoadById_ReturnsApiKey_WhenExists() {
     // Given: An API key in the database
     ByteString uniqueHash = randomBytes();
-    ApiKey key = createTestApiKey("testkey", uniqueHash, "ACTIVE"); // 7 chars
+    ApiKey key = createTestApiKey("tst_key", uniqueHash, "ACTIVE"); // 7 chars
     ApiKeys.save(connection, key);
 
     // When: We load the API key by ID
@@ -127,8 +127,8 @@ public class ApiKeysTest {
     // Then: The API key is returned
     assertTrue(result.isOk());
     assertTrue(result.getValue().isPresent());
-    assertEquals("testkey", result.getValue().get().keyPrefix());
-    assertEquals("testhash", result.getValue().get().keyHash());
+    assertEquals("tst_key", result.getValue().get().keyPrefix());
+    assertEquals(uniqueHash, result.getValue().get().keyHash());
     assertEquals("ACTIVE", result.getValue().get().status());
   }
 
@@ -174,7 +174,7 @@ public class ApiKeysTest {
     ByteString uniqueHash = randomBytes();
 
     // Given: An API key with a specific hash
-    ApiKey key = createTestApiKey("test_prefix", uniqueHash, "ACTIVE"); // 7 chars
+    ApiKey key = createTestApiKey("tst_pre", uniqueHash, "ACTIVE"); // 7 chars
     ApiKeys.save(connection, key);
 
     // When: We load the API key by hash
@@ -183,7 +183,7 @@ public class ApiKeysTest {
     // Then: The API key is returned
     assertTrue(result.isOk());
     assertTrue(result.getValue().isPresent());
-    assertEquals("test_prefix", result.getValue().get().keyPrefix());
+    assertEquals("tst_pre", result.getValue().get().keyPrefix());
     assertEquals(key.apiKeyId(), result.getValue().get().apiKeyId());
   }
 
