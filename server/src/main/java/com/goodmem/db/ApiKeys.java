@@ -5,6 +5,7 @@ import com.goodmem.common.status.StatusOr;
 import com.goodmem.db.util.DbUtil;
 import com.goodmem.db.util.UuidUtil;
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.ByteString;
 
 import javax.annotation.Nonnull;
 import java.sql.Connection;
@@ -197,7 +198,7 @@ public final class ApiKeys {
             stmt.setString(3, apiKey.keyPrefix());
             
             System.out.println("  4. key_hash = " + apiKey.keyHash());
-            stmt.setString(4, apiKey.keyHash());
+            stmt.setBytes(4, apiKey.keyHash().toByteArray());
             
             System.out.println("  5. status = " + apiKey.status());
             stmt.setString(5, apiKey.status());
@@ -366,7 +367,7 @@ public final class ApiKeys {
         }
 
         String keyPrefix = rs.getString("key_prefix");
-        String keyHash = rs.getString("key_hash");
+        ByteString keyHash = ByteString.copyFrom(rs.getBytes("key_hash"));
         String status = rs.getString("status");
 
         // Note: In a real implementation, you would use proper JSONB parsing

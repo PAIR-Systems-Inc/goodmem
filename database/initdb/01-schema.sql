@@ -16,7 +16,7 @@ CREATE TABLE apikey (
     api_key_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES "user"(user_id) ON DELETE CASCADE,
     key_prefix VARCHAR(10) NOT NULL, -- For display purposes
-    key_hash VARCHAR(255) NOT NULL UNIQUE, -- Store a hash of the key, not the raw key
+    key_hash BYTEA NOT NULL UNIQUE, -- Store a hash of the key, not the raw key
     status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE', -- e.g., ACTIVE, INACTIVE (Consider ENUM type)
     labels JSONB,
     expires_at TIMESTAMPTZ,

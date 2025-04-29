@@ -2,6 +2,7 @@ package com.goodmem.db;
 
 import com.goodmem.db.util.DbUtil;
 import com.goodmem.db.util.UuidUtil;
+import com.google.protobuf.ByteString;
 
 import java.time.Instant;
 import java.util.Map;
@@ -27,7 +28,7 @@ public record ApiKey(
         UUID apiKeyId,
         UUID userId,
         String keyPrefix,
-        String keyHash,
+        ByteString keyHash,
         String status,
         Map<String, String> labels,
         Instant expiresAt,

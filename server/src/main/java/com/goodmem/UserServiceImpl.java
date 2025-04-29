@@ -75,12 +75,12 @@ public class UserServiceImpl extends UserServiceImplBase {
       }
 
       InitializeSystemResponse.Builder responseBuilder = InitializeSystemResponse.newBuilder()
-          .setAlreadyInitialized(result.initialized())
-          .setMessage(result.initialized()
+          .setAlreadyInitialized(result.alreadyInitialized())
+          .setMessage(result.alreadyInitialized()
               ? "System is already initialized" 
               : "System initialized successfully");
       
-      if (!result.initialized() && result.userId() != null) {
+      if (!result.alreadyInitialized() && result.userId() != null) {
         responseBuilder
             .setRootApiKey(result.apiKey())
             .setUserId(Uuids.getBytesFromUUID(result.userId()));

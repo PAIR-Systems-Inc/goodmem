@@ -25,7 +25,8 @@ public record ApiKey(
     private static final String HASH_ALGORITHM = "SHA3-256";
     private static final String KEY_PREFIX = "gm_";
     private static final BaseEncoding KEY_ENCODING = BaseEncoding.base32().omitPadding();
-    public static final int DEFAULT_KEY_BYTES = 24; // 192 bits -> 39 Base32 chars
+    public static final int DEFAULT_KEY_BYTES = 16;
+    private static final int DEFAULT_DISPLAY_PREFIX = 8;
 
     /**
      * Canonical constructor for the record. Parameters are already immutable.
@@ -76,7 +77,7 @@ public record ApiKey(
 
         // 3. Encode original Key Material (Base32 - Guava) and create Key String
         //    We encode from the original byte[] for efficiency, could also use ByteString.toByteArray()
-        String base32EncodedMaterial = KEY_ENCODING.encode(rawMaterialBytes);
+        String base32EncodedMaterial = KEY_ENCODING.encode(rawMaterialBytes).toLowerCase();
         String fullKeyString = KEY_PREFIX + base32EncodedMaterial;
 
         // 4. Convert byte arrays to immutable ByteString (single copy happens here)
@@ -107,6 +108,30 @@ public record ApiKey(
         // Avoid leaking raw key material in general logs
         // Use helper that now accepts ByteString
         return "ApiKey[keyString=" + keyString + ", hashedKeyMaterial=" + bytesToHex(hashedKeyMaterial) + "]";
+    }
+
+    /**
+     * Returns a prefix of the API key string for display purposes.
+     * This is useful for UI displays where you want to show part of the key 
+     * for identification without revealing the full key.
+     *
+     * @param prefix_length The number of characters to include in the prefix
+     * @return A prefix of the key string with the specified length
+     * @throws IndexOutOfBoundsException if prefix_length is negative or greater than the key length
+     */
+    public String displayPrefix(int prefix_length) {
+        return keyString.substring(0, prefix_length);
+    }
+
+    /**
+     * Returns a standard-length prefix of the API key string for display purposes.
+     * Uses the default display prefix length defined by DEFAULT_DISPLAY_PREFIX.
+     *
+     * @return A prefix of the key string with the default length
+     * @throws IndexOutOfBoundsException if the default prefix length is greater than the key length
+     */
+    public String displayPrefix() {
+        return displayPrefix(DEFAULT_DISPLAY_PREFIX);
     }
 
     // Helper to display bytes more cleanly - updated to accept ByteString

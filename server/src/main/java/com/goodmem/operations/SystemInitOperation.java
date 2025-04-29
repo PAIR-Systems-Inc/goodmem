@@ -5,8 +5,12 @@ import com.goodmem.db.ApiKey;
 import com.goodmem.db.ApiKeys;
 import com.goodmem.db.User;
 import com.goodmem.db.Users;
+import com.google.protobuf.ByteString;
+import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NotNull;
 import org.tinylog.Logger;
 
+import java.security.SecureRandom;
 import java.sql.Connection;
 import java.time.Instant;
 import java.util.Map;
@@ -38,7 +42,9 @@ public class SystemInitOperation {
             return new InitResult(false, apiKey, userId, null);
         }
 
-        public static InitResult alreadyInitialized() {
+        @NotNull
+        @Contract(" -> new")
+        public static InitResult initialized() {
             return new InitResult(true, null, null, null);
         }
 
@@ -71,7 +77,7 @@ public class SystemInitOperation {
             // If root user exists, return "already initialized" result
             if (rootUserOr.getValue().isPresent()) {
                 Logger.info("System is already initialized");
-                return InitResult.alreadyInitialized();
+                return InitResult.initialized();
             }
 
             // Root user doesn't exist, create it
@@ -94,10 +100,13 @@ public class SystemInitOperation {
             }
 
             // Create an API key for the root user
+            SecureRandom random = new SecureRandom();
+            com.goodmem.security.ApiKey key = com.goodmem.security.ApiKey.newKey(random);
+
             UUID apiKeyId = UUID.randomUUID();
             String rawApiKey = "gm_" + UUID.randomUUID().toString().replace("-", "");
             String keyPrefix = rawApiKey.substring(0, Math.min(rawApiKey.length(), 10));
-            String keyHash = rawApiKey; // In a real system, this would be a secure hash
+            ByteString keyHash = key.hashedKeyMaterial();
 
             ApiKey apiKey = new ApiKey(
                     apiKeyId,
@@ -117,17 +126,16 @@ public class SystemInitOperation {
             StatusOr<Integer> saveApiKeyOr = ApiKeys.save(dbConnection, apiKey);
             if (saveApiKeyOr.isNotOk()) {
                 String error = "Failed to create API key: " + saveApiKeyOr.getStatus().getMessage();
-                logger.severe(error);
+                Logger.error(error);
                 return InitResult.error(error);
             }
 
-            logger.info("System initialized successfully");
+            Logger.info("System initialized successfully");
             return InitResult.success(rawApiKey, rootUserId);
 
         } catch (Exception e) {
-            String error = "Error during system initialization: " + e.getMessage();
-            logger.severe(error);
-            e.printStackTrace();
+            String error = "Error during system initialization.";
+            Logger.error(e, error);
             return InitResult.error(error);
         }
     }
