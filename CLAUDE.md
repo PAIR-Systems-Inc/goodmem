@@ -69,6 +69,32 @@
   - Follow consistent naming pattern for handler methods: `handle<Service><Method>`
   - Convert JSON request bodies to protocol buffer requests using appropriate builders
   - Convert protocol buffer responses to JSON using utility methods
+- **Error Handling**:
+  - Use detailed error logging internally, but return generic error messages to clients
+  - Log specific error details with `Logger.error()` including exception information
+  - Return standardized generic error messages to clients to avoid information leakage
+  - For internal errors (SQLException, general exceptions), always use the message "Unexpected error while processing request."
+  - For validation errors (missing required fields, format issues), use specific but non-revealing messages
+  - Example implementation pattern:
+    ```java
+    try {
+      // Database operation
+    } catch (SQLException e) {
+      // Log detailed error information for troubleshooting
+      Logger.error(e, "Database error during operation: {}", e.getMessage());
+      // Return generic error message to client
+      responseObserver.onError(io.grpc.Status.INTERNAL
+          .withDescription("Unexpected error while processing request.")
+          .asRuntimeException());
+    } catch (Exception e) {
+      // Log the unexpected exception details
+      Logger.error(e, "Unexpected error during operation: {}", e.getMessage());
+      // Same generic error message to client
+      responseObserver.onError(io.grpc.Status.INTERNAL
+          .withDescription("Unexpected error while processing request.")
+          .asRuntimeException());
+    }
+    ```
 - **UUID Handling**:
   - Protocol buffer definitions use binary UUIDs (`bytes`) for better performance
   - REST API uses hex string representation with standard UUID formatting (8-4-4-4-12)

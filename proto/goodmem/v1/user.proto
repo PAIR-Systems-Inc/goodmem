@@ -21,16 +21,39 @@ message User {
 // Basic service for user management (can be expanded)
 service UserService {
   // Retrieves user details (excluding sensitive info)
+  // The request can specify user_id, email, both, or neither.
+  // - If neither is specified, returns the current user based on API key authentication
+  // - If user_id is specified, looks up user by ID
+  // - If email is specified (and user_id not specified), looks up user by email
+  // - If both are specified, looks up by user_id and ignores email (with a warning)
+  // 
+  // All API calls (except InitializeSystem) require authentication.
+  // Possible error codes:
+  // - NOT_FOUND: No matching user exists
+  // - UNAUTHENTICATED: The request has no valid authentication
+  // - PERMISSION_DENIED: The authenticated user is not authorized to view the requested user's information
   rpc GetUser(GetUserRequest) returns (User);
+  
   // Initializes the system with a root user and API key (if not already initialized)
+  // This is an administrative operation that creates the initial system user.
+  // This is the only method that does not require authentication.
+  // 
+  // Possible error codes:
+  // - ALREADY_EXISTS: The system is already initialized
   rpc InitializeSystem(InitializeSystemRequest) returns (InitializeSystemResponse);
+  
   // Could add ListUsers, UpdateUser (for display_name etc.) if needed
 }
 
 message GetUserRequest {
-  bytes user_id = 1; // Get by UUID (16 bytes)
-  // Alternatively, allow lookup by email if desired
-  // string email = 2;
+  optional bytes user_id = 1; // Get by UUID (16 bytes)
+  optional string email = 2; // Get by email address
+  
+  // Lookup behavior:
+  // 1. If neither user_id nor email is set: Returns the current user based on API key authentication
+  // 2. If user_id is set: Looks up user by ID
+  // 3. If email is set (and user_id not set): Looks up user by email
+  // 4. If both are set: Looks up by user_id and ignores email (with a warning)
 }
 
 message InitializeSystemRequest {

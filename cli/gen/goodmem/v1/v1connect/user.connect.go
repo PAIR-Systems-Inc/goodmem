@@ -43,8 +43,24 @@ const (
 // UserServiceClient is a client for the goodmem.v1.UserService service.
 type UserServiceClient interface {
 	// Retrieves user details (excluding sensitive info)
+	// The request can specify user_id, email, both, or neither.
+	// - If neither is specified, returns the current user based on API key authentication
+	// - If user_id is specified, looks up user by ID
+	// - If email is specified (and user_id not specified), looks up user by email
+	// - If both are specified, looks up by user_id and ignores email (with a warning)
+	//
+	// All API calls (except InitializeSystem) require authentication.
+	// Possible error codes:
+	// - NOT_FOUND: No matching user exists
+	// - UNAUTHENTICATED: The request has no valid authentication
+	// - PERMISSION_DENIED: The authenticated user is not authorized to view the requested user's information
 	GetUser(context.Context, *connect_go.Request[v1.GetUserRequest]) (*connect_go.Response[v1.User], error)
 	// Initializes the system with a root user and API key (if not already initialized)
+	// This is an administrative operation that creates the initial system user.
+	// This is the only method that does not require authentication.
+	//
+	// Possible error codes:
+	// - ALREADY_EXISTS: The system is already initialized
 	InitializeSystem(context.Context, *connect_go.Request[v1.InitializeSystemRequest]) (*connect_go.Response[v1.InitializeSystemResponse], error)
 }
 
@@ -90,8 +106,24 @@ func (c *userServiceClient) InitializeSystem(ctx context.Context, req *connect_g
 // UserServiceHandler is an implementation of the goodmem.v1.UserService service.
 type UserServiceHandler interface {
 	// Retrieves user details (excluding sensitive info)
+	// The request can specify user_id, email, both, or neither.
+	// - If neither is specified, returns the current user based on API key authentication
+	// - If user_id is specified, looks up user by ID
+	// - If email is specified (and user_id not specified), looks up user by email
+	// - If both are specified, looks up by user_id and ignores email (with a warning)
+	//
+	// All API calls (except InitializeSystem) require authentication.
+	// Possible error codes:
+	// - NOT_FOUND: No matching user exists
+	// - UNAUTHENTICATED: The request has no valid authentication
+	// - PERMISSION_DENIED: The authenticated user is not authorized to view the requested user's information
 	GetUser(context.Context, *connect_go.Request[v1.GetUserRequest]) (*connect_go.Response[v1.User], error)
 	// Initializes the system with a root user and API key (if not already initialized)
+	// This is an administrative operation that creates the initial system user.
+	// This is the only method that does not require authentication.
+	//
+	// Possible error codes:
+	// - ALREADY_EXISTS: The system is already initialized
 	InitializeSystem(context.Context, *connect_go.Request[v1.InitializeSystemRequest]) (*connect_go.Response[v1.InitializeSystemResponse], error)
 }
 

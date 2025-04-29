@@ -110,7 +110,8 @@ func (x *User) GetUpdatedAt() *timestamppb.Timestamp {
 
 type GetUserRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        []byte                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // Get by UUID (16 bytes)
+	UserId        []byte                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3,oneof" json:"user_id,omitempty"` // Get by UUID (16 bytes)
+	Email         *string                `protobuf:"bytes,2,opt,name=email,proto3,oneof" json:"email,omitempty"`                 // Get by email address
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -150,6 +151,13 @@ func (x *GetUserRequest) GetUserId() []byte {
 		return x.UserId
 	}
 	return nil
+}
+
+func (x *GetUserRequest) GetEmail() string {
+	if x != nil && x.Email != nil {
+		return *x.Email
+	}
+	return ""
 }
 
 type InitializeSystemRequest struct {
@@ -270,9 +278,13 @@ const file_goodmem_v1_user_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\")\n" +
-	"\x0eGetUserRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\fR\x06userId\"\x19\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"_\n" +
+	"\x0eGetUserRequest\x12\x1c\n" +
+	"\auser_id\x18\x01 \x01(\fH\x00R\x06userId\x88\x01\x01\x12\x19\n" +
+	"\x05email\x18\x02 \x01(\tH\x01R\x05email\x88\x01\x01B\n" +
+	"\n" +
+	"\b_user_idB\b\n" +
+	"\x06_email\"\x19\n" +
 	"\x17InitializeSystemRequest\"\xa0\x01\n" +
 	"\x18InitializeSystemResponse\x12/\n" +
 	"\x13already_initialized\x18\x01 \x01(\bR\x12alreadyInitialized\x12\x18\n" +
@@ -323,6 +335,7 @@ func file_goodmem_v1_user_proto_init() {
 	if File_goodmem_v1_user_proto != nil {
 		return
 	}
+	file_goodmem_v1_user_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

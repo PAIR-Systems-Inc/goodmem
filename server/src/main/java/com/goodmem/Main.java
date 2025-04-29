@@ -3,6 +3,8 @@ package com.goodmem;
 import com.goodmem.common.status.Status;
 import com.goodmem.common.status.StatusOr;
 import com.goodmem.config.MinioConfig;
+import com.goodmem.security.AuthInterceptor;
+import com.goodmem.security.ConditionalAuthInterceptor;
 import com.google.common.base.Strings;
 import com.google.common.io.BaseEncoding;
 import com.google.common.io.ByteSource;
