@@ -150,7 +150,8 @@ type CreateSpaceRequest struct {
 	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Labels         map[string]string      `protobuf:"bytes,2,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	EmbeddingModel string                 `protobuf:"bytes,3,opt,name=embedding_model,json=embeddingModel,proto3" json:"embedding_model,omitempty"`
-	PublicRead     bool                   `protobuf:"varint,4,opt,name=public_read,json=publicRead,proto3" json:"public_read,omitempty"` // owner_id and created_by_id derived from auth context.
+	PublicRead     bool                   `protobuf:"varint,4,opt,name=public_read,json=publicRead,proto3" json:"public_read,omitempty"`
+	OwnerId        []byte                 `protobuf:"bytes,5,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"` // Optional: if not provided, derived from auth context. If provided, requires CREATE_SPACE_ANY permission.
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -211,6 +212,13 @@ func (x *CreateSpaceRequest) GetPublicRead() bool {
 		return x.PublicRead
 	}
 	return false
+}
+
+func (x *CreateSpaceRequest) GetOwnerId() []byte {
+	if x != nil {
+		return x.OwnerId
+	}
+	return nil
 }
 
 type GetSpaceRequest struct {
@@ -492,13 +500,14 @@ const file_goodmem_v1_space_proto_rawDesc = "" +
 	" \x01(\fR\vupdatedById\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf1\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8c\x02\n" +
 	"\x12CreateSpaceRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12B\n" +
 	"\x06labels\x18\x02 \x03(\v2*.goodmem.v1.CreateSpaceRequest.LabelsEntryR\x06labels\x12'\n" +
 	"\x0fembedding_model\x18\x03 \x01(\tR\x0eembeddingModel\x12\x1f\n" +
 	"\vpublic_read\x18\x04 \x01(\bR\n" +
-	"publicRead\x1a9\n" +
+	"publicRead\x12\x19\n" +
+	"\bowner_id\x18\x05 \x01(\fR\aownerId\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\",\n" +
