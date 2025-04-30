@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -32,6 +33,9 @@ var createApiKeyCmd = &cobra.Command{
 	Short: "Create a new API key",
 	Long:  `Create a new API key in the GoodMem service.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Silence usage for server-side errors
+		cmd.SilenceUsage = true
+		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
 		
@@ -64,7 +68,11 @@ var createApiKeyCmd = &cobra.Command{
 
 		resp, err := client.CreateApiKey(context.Background(), req)
 		if err != nil {
-			return fmt.Errorf("error creating API key: %w", err)
+			var connectErr *connect.Error
+			if errors.As(err, &connectErr) {
+				return fmt.Errorf("%v", connectErr.Message())
+			}
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		// Print the created API key with raw key
@@ -86,6 +94,9 @@ var listApiKeysCmd = &cobra.Command{
 	Short: "List API keys",
 	Long:  `List all API keys for the authenticated user in the GoodMem service.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Silence usage for server-side errors
+		cmd.SilenceUsage = true
+		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
 		
@@ -106,7 +117,11 @@ var listApiKeysCmd = &cobra.Command{
 
 		resp, err := client.ListApiKeys(context.Background(), req)
 		if err != nil {
-			return fmt.Errorf("error listing API keys: %w", err)
+			var connectErr *connect.Error
+			if errors.As(err, &connectErr) {
+				return fmt.Errorf("%v", connectErr.Message())
+			}
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		// Print the API keys
@@ -127,6 +142,9 @@ var updateApiKeyCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		apiKeyID := args[0]
+		
+		// Silence usage for server-side errors
+		cmd.SilenceUsage = true
 		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
@@ -176,7 +194,11 @@ var updateApiKeyCmd = &cobra.Command{
 
 		resp, err := client.UpdateApiKey(context.Background(), req)
 		if err != nil {
-			return fmt.Errorf("error updating API key: %w", err)
+			var connectErr *connect.Error
+			if errors.As(err, &connectErr) {
+				return fmt.Errorf("%v", connectErr.Message())
+			}
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		// Print the updated API key
@@ -197,6 +219,9 @@ var deleteApiKeyCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		apiKeyID := args[0]
+		
+		// Silence usage for server-side errors
+		cmd.SilenceUsage = true
 		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
@@ -220,7 +245,11 @@ var deleteApiKeyCmd = &cobra.Command{
 
 		_, err := client.DeleteApiKey(context.Background(), req)
 		if err != nil {
-			return fmt.Errorf("error deleting API key: %w", err)
+			var connectErr *connect.Error
+			if errors.As(err, &connectErr) {
+				return fmt.Errorf("%v", connectErr.Message())
+			}
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		fmt.Printf("API key %s deleted\n", apiKeyID)

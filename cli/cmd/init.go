@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -54,6 +55,9 @@ The init command will:
 			}
 			configDir = filepath.Join(home, ".goodmem")
 		}
+		
+		// Silence usage for server-side errors
+		cmd.SilenceUsage = true
 
 		// Create config directory if it doesn't exist
 		if _, err := os.Stat(configDir); os.IsNotExist(err) {
@@ -114,10 +118,11 @@ The init command will:
 		// Execute the request
 		resp, err := userClient.InitializeSystem(context.Background(), req)
 		if err != nil {
-			if connectErr, ok := err.(*connect.Error); ok {
-				return fmt.Errorf("gRPC error: %s - %s", connectErr.Code(), connectErr.Message())
+			var connectErr *connect.Error
+			if errors.As(err, &connectErr) {
+				return fmt.Errorf("%s - %s", connectErr.Code(), connectErr.Message())
 			}
-			return fmt.Errorf("error connecting to server: %w", err)
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		// Print the initialization status

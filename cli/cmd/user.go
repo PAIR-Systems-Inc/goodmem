@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/bufbuild/connect-go"
@@ -33,6 +34,9 @@ If called with no arguments, retrieves the current user (based on API key).
 Can be called with either a user ID or email address to look up a specific user.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Silence usage for server-side errors (no real client-side validation to do)
+		cmd.SilenceUsage = true
+		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
 		
@@ -68,7 +72,11 @@ Can be called with either a user ID or email address to look up a specific user.
 
 		resp, err := client.GetUser(context.Background(), req)
 		if err != nil {
-			return fmt.Errorf("error getting user: %w", err)
+			var connectErr *connect.Error
+			if errors.As(err, &connectErr) {
+				return fmt.Errorf("%v", connectErr.Message())
+			}
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		// Print the user details

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -34,6 +35,9 @@ var createMemoryCmd = &cobra.Command{
 	Short: "Create a new memory",
 	Long:  `Create a new memory in the GoodMem service.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// After client-side validation passes, silence usage for server-side errors
+		cmd.SilenceUsage = true
+		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
 		
@@ -69,7 +73,11 @@ var createMemoryCmd = &cobra.Command{
 
 		resp, err := client.CreateMemory(context.Background(), req)
 		if err != nil {
-			return fmt.Errorf("error creating memory: %w", err)
+			var connectErr *connect.Error
+			if errors.As(err, &connectErr) {
+				return fmt.Errorf("%v", connectErr.Message())
+			}
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		// Print the created memory
@@ -90,6 +98,9 @@ var getMemoryCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		memoryID := args[0]
+		
+		// After client-side validation passes, silence usage for server-side errors
+		cmd.SilenceUsage = true
 		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
@@ -113,7 +124,11 @@ var getMemoryCmd = &cobra.Command{
 
 		resp, err := client.GetMemory(context.Background(), req)
 		if err != nil {
-			return fmt.Errorf("error getting memory: %w", err)
+			var connectErr *connect.Error
+			if errors.As(err, &connectErr) {
+				return fmt.Errorf("%v", connectErr.Message())
+			}
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		// Print the memory details
@@ -135,6 +150,9 @@ var listMemoriesCmd = &cobra.Command{
 		if spaceID == "" {
 			return fmt.Errorf("space-id is required")
 		}
+		
+		// After client-side validation passes, silence usage for server-side errors
+		cmd.SilenceUsage = true
 		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
@@ -158,7 +176,11 @@ var listMemoriesCmd = &cobra.Command{
 
 		resp, err := client.ListMemories(context.Background(), req)
 		if err != nil {
-			return fmt.Errorf("error listing memories: %w", err)
+			var connectErr *connect.Error
+			if errors.As(err, &connectErr) {
+				return fmt.Errorf("%v", connectErr.Message())
+			}
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		// Print the memories
@@ -179,6 +201,9 @@ var deleteMemoryCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		memoryID := args[0]
+		
+		// After client-side validation passes, silence usage for server-side errors
+		cmd.SilenceUsage = true
 		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
@@ -202,7 +227,11 @@ var deleteMemoryCmd = &cobra.Command{
 
 		_, err := client.DeleteMemory(context.Background(), req)
 		if err != nil {
-			return fmt.Errorf("error deleting memory: %w", err)
+			var connectErr *connect.Error
+			if errors.As(err, &connectErr) {
+				return fmt.Errorf("%v", connectErr.Message())
+			}
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		fmt.Printf("Memory %s deleted\n", memoryID)
