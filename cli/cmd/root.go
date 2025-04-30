@@ -84,8 +84,12 @@ func createHTTPClient(insecure bool, serverAddr string) *http.Client {
 
 func Execute(commit string) {
 	gitCommit = commit
+	
+	// Set this to prevent double error output
+	rootCmd.SilenceErrors = true
+	
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 }

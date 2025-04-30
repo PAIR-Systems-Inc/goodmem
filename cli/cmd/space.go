@@ -124,6 +124,9 @@ var createSpaceCmd = &cobra.Command{
 			return fmt.Errorf("space name is required")
 		}
 		
+		// After client-side validation passes, silence usage for server-side errors
+		cmd.SilenceUsage = true
+		
 		// Create the client
 		httpClient := createHTTPClient(true, serverAddress)
 		client := v1connect.NewSpaceServiceClient(
@@ -182,10 +185,10 @@ var createSpaceCmd = &cobra.Command{
 				case connect.CodeInvalidArgument:
 					return fmt.Errorf("invalid request: %v", connectErr.Message())
 				default:
-					return fmt.Errorf("error creating space: %v", connectErr.Message())
+					return fmt.Errorf("%v", connectErr.Message())
 				}
 			}
-			return fmt.Errorf("error creating space: %w", err)
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 		
 		// Process the response
@@ -244,6 +247,9 @@ var listSpacesCmd = &cobra.Command{
 	Short: "List spaces",
 	Long:  `List spaces in the GoodMem service, optionally filtered by labels.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Silence usage for server-side errors (no client-side validation to do)
+		cmd.SilenceUsage = true
+		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
 		
@@ -270,7 +276,11 @@ var listSpacesCmd = &cobra.Command{
 
 		resp, err := client.ListSpaces(context.Background(), req)
 		if err != nil {
-			return fmt.Errorf("error listing spaces: %w", err)
+			var connectErr *connect.Error
+			if errors.As(err, &connectErr) {
+				return fmt.Errorf("%v", connectErr.Message())
+			}
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		// Print the spaces
@@ -297,6 +307,9 @@ var deleteSpaceCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("invalid space ID: %w", err)
 		}
+		
+		// After client-side validation passes, silence usage for server-side errors
+		cmd.SilenceUsage = true
 		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
@@ -326,10 +339,10 @@ var deleteSpaceCmd = &cobra.Command{
 				case connect.CodePermissionDenied:
 					return fmt.Errorf("you don't have permission to delete this space")
 				default:
-					return fmt.Errorf("error deleting space: %v", connectErr.Message())
+					return fmt.Errorf("%v", connectErr.Message())
 				}
 			}
-			return fmt.Errorf("error deleting space: %w", err)
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		fmt.Printf("Space %s deleted successfully\n", spaceIDStr)
@@ -351,6 +364,9 @@ var getSpaceCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("invalid space ID: %w", err)
 		}
+		
+		// After client-side validation passes, silence usage for server-side errors
+		cmd.SilenceUsage = true
 		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
@@ -380,10 +396,10 @@ var getSpaceCmd = &cobra.Command{
 				case connect.CodePermissionDenied:
 					return fmt.Errorf("you don't have permission to access this space")
 				default:
-					return fmt.Errorf("error getting space: %v", connectErr.Message())
+					return fmt.Errorf("%v", connectErr.Message())
 				}
 			}
-			return fmt.Errorf("error getting space: %w", err)
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		// Print the space details (for now keeping JSON format)
@@ -410,6 +426,9 @@ var updateSpaceCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("invalid space ID: %w", err)
 		}
+		
+		// After client-side validation passes, silence usage for server-side errors
+		cmd.SilenceUsage = true
 		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
@@ -460,10 +479,10 @@ var updateSpaceCmd = &cobra.Command{
 				case connect.CodeAlreadyExists:
 					return fmt.Errorf("cannot update: a space with name '%s' already exists for this owner", spaceName)
 				default:
-					return fmt.Errorf("error updating space: %v", connectErr.Message())
+					return fmt.Errorf("%v", connectErr.Message())
 				}
 			}
-			return fmt.Errorf("error updating space: %w", err)
+			return fmt.Errorf("unexpected error: %w", err)
 		}
 
 		// Print the updated space (for now keeping JSON format)
