@@ -2,9 +2,16 @@ package com.goodmem.db.util;
 
 import com.goodmem.common.status.Status;
 import com.goodmem.common.status.StatusOr;
+import com.google.common.base.Strings;
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.reflect.TypeToken;
 import com.google.protobuf.util.Timestamps;
+import java.lang.reflect.Type;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
@@ -157,31 +164,81 @@ public final class DbUtil {
   }
 
   /**
-   * Converts a PostgreSQL JSONB map to a Java Map<String, String>. This is a placeholder
-   * implementation - in a real implementation, you would use Jackson or another JSON library to
-   * parse the JSONB string.
+   * Converts a PostgreSQL JSONB map to a Java Map<String, String>.
+   * Uses Gson to parse the JSON string from the database.
+   *
+   * @param rs The ResultSet containing the JSONB column
+   * @param columnName The name of the column containing the JSONB data
+   * @return StatusOr containing the parsed Map<String, String> or an error
    */
   @Nonnull
   public static StatusOr<Map<String, String>> parseJsonbToMap(ResultSet rs, String columnName) {
-    // This is a placeholder - in a real implementation, you would use
-    // Jackson or another JSON library to parse the JSONB string
     try {
-      // This simple implementation assumes the JSONB is stored as a string
-      // and can be directly parsed into a Map<String, String>
       String jsonbStr = rs.getString(columnName);
-      if (rs.wasNull() || jsonbStr == null) {
-        return StatusOr.ofValue(Map.of()); // Empty map for null JSONB
+      if (rs.wasNull() || Strings.isNullOrEmpty(jsonbStr)) {
+        return StatusOr.ofValue(Map.of()); // Empty map for null or empty JSONB
       }
 
-      // In a real implementation, you would use Jackson to parse the JSON
-      // For example:
-      // ObjectMapper mapper = new ObjectMapper();
-      // TypeReference<Map<String, String>> typeRef = new TypeReference<>() {};
-      // return StatusOr.ofValue(mapper.readValue(jsonbStr, typeRef));
-
-      return StatusOr.ofStatus(Status.unimplemented("JSONB parsing not implemented"));
+      try {
+        // Use Gson to parse the JSON string into a Map<String, String>
+        Gson gson = new Gson();
+        Type mapType = new TypeToken<Map<String, String>>() {}.getType();
+        
+        return StatusOr.ofValue(gson.fromJson(jsonbStr, mapType));
+      } catch (JsonSyntaxException e) {
+        return StatusOr.ofStatus(Status.internal("Failed to parse JSON: " + e.getMessage(), e));
+      }
     } catch (SQLException e) {
-      return StatusOr.ofStatus(Status.internal("Failed to parse JSONB: " + e.getMessage(), e));
+      return StatusOr.ofStatus(Status.internal("Failed to retrieve JSONB: " + e.getMessage(), e));
+    }
+  }
+  
+  /**
+   * Converts a Java Map<String, String> to a JSON string for storage in PostgreSQL JSONB column.
+   *
+   * @param map The Map<String, String> to convert to JSON
+   * @return StatusOr containing the JSON string or an error
+   */
+  @Nonnull
+  public static StatusOr<String> mapToJsonb(Map<String, String> map) {
+    if (map == null || map.isEmpty()) {
+      return StatusOr.ofValue("{}"); // Empty JSON object for null or empty map
+    }
+    
+    try {
+      Gson gson = new Gson();
+      return StatusOr.ofValue(gson.toJson(map));
+    } catch (Exception e) {
+      return StatusOr.ofStatus(Status.internal("Failed to serialize map to JSON: " + e.getMessage(), e));
+    }
+  }
+  
+  /**
+   * Sets a Map<String, String> as a JSONB value in a PreparedStatement.
+   *
+   * @param stmt The PreparedStatement to set the parameter in
+   * @param parameterIndex The index of the parameter to set (1-based)
+   * @param map The Map<String, String> to set as JSONB
+   * @return Status indicating success or failure
+   */
+  @Nonnull
+  public static Status setJsonbParameter(PreparedStatement stmt, int parameterIndex, Map<String, String> map) {
+    try {
+      if (map == null || map.isEmpty()) {
+        // For empty maps, use a special JSON type to ensure it's stored as a valid JSON object
+        stmt.setObject(parameterIndex, "{}", Types.OTHER);
+        return Status.ok();
+      }
+      
+      StatusOr<String> jsonOr = mapToJsonb(map);
+      if (jsonOr.isNotOk()) {
+        return jsonOr.getStatus();
+      }
+      
+      stmt.setObject(parameterIndex, jsonOr.getValue(), Types.OTHER);
+      return Status.ok();
+    } catch (SQLException e) {
+      return Status.internal("Failed to set JSONB parameter: " + e.getMessage(), e);
     }
   }
 
