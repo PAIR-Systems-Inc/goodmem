@@ -11,6 +11,30 @@ CREATE TABLE "user" ( -- Quoted because user is a reserved keyword in SQL
 );
 CREATE INDEX idx_user_email ON "user" (email);
 
+-- Table for Role definitions
+CREATE TABLE role (
+    role_name VARCHAR(16) PRIMARY KEY,
+    description TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp
+);
+
+-- Insert standard roles
+INSERT INTO role (role_name, description) VALUES
+    ('ROOT', 'System owner with full access to all resources and operations'),
+    ('ADMIN', 'Administrator with broad access to system management functions'),
+    ('USER', 'Standard user with access to own resources and basic system features');
+
+-- Table for User-Role mappings
+CREATE TABLE user_role (
+    user_id UUID NOT NULL REFERENCES "user"(user_id) ON DELETE CASCADE,
+    role_name VARCHAR(16) NOT NULL REFERENCES role(role_name) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
+    PRIMARY KEY (user_id, role_name)
+);
+CREATE INDEX idx_user_role_role_name ON user_role (role_name);
+
 -- Table for API Keys
 CREATE TABLE apikey (
     api_key_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -104,6 +128,8 @@ $$ LANGUAGE plpgsql;
 
 -- Apply trigger to tables
 CREATE TRIGGER set_timestamp_user BEFORE UPDATE ON "user" FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+CREATE TRIGGER set_timestamp_role BEFORE UPDATE ON role FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+CREATE TRIGGER set_timestamp_user_role BEFORE UPDATE ON user_role FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 CREATE TRIGGER set_timestamp_apikey BEFORE UPDATE ON apikey FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 CREATE TRIGGER set_timestamp_space BEFORE UPDATE ON space FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 CREATE TRIGGER set_timestamp_memory BEFORE UPDATE ON memory FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
