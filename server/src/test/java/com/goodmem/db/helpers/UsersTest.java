@@ -20,17 +20,17 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
-import org.testcontainers.utility.MountableFile;
 
 /** Tests for the Users helper class. These tests verify all CRUD operations and edge cases. */
 @Testcontainers
 public class UsersTest {
 
-  // Setup paths to the schema files
-  private static final String PROJECT_ROOT = "/home/amin/clients/wsl_pairsys/goodmem";
-  private static final String EXTENSIONS_SQL_PATH =
-      PROJECT_ROOT + "/database/initdb/00-extensions.sql";
-  private static final String SCHEMA_SQL_PATH = PROJECT_ROOT + "/database/initdb/01-schema.sql";
+  // Use classpath resources for schema files - with and without leading slash
+  // Leading slash is used when loading resources with getResource()
+  // No leading slash is used for TestContainers withInitScript()
+  private static final String EXTENSIONS_SQL_PATH = "/db/00-extensions.sql";
+  private static final String SCHEMA_SQL_PATH = "/db/01-schema.sql";
+  private static final String TC_EXTENSIONS_SQL_PATH = "db/00-extensions.sql";
 
   @Container
   private static final PostgreSQLContainer<?> postgres =
@@ -38,12 +38,8 @@ public class UsersTest {
           .withDatabaseName("goodmem_users_test")
           .withUsername("goodmem")
           .withPassword("goodmem")
-          .withCopyFileToContainer(
-              MountableFile.forHostPath(EXTENSIONS_SQL_PATH),
-              "/docker-entrypoint-initdb.d/00-extensions.sql")
-          .withCopyFileToContainer(
-              MountableFile.forHostPath(SCHEMA_SQL_PATH),
-              "/docker-entrypoint-initdb.d/01-schema.sql");
+          // Initialize with extensions first to make functions available
+          .withInitScript(TC_EXTENSIONS_SQL_PATH);
 
   private static Connection connection;
 
@@ -53,6 +49,23 @@ public class UsersTest {
     connection =
         DriverManager.getConnection(
             postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+            
+    // Execute the schema script after the container is started and extensions are loaded
+    try (var stmt = connection.createStatement()) {
+      // Read schema file from classpath
+      var schemaUrl = UsersTest.class.getResource(SCHEMA_SQL_PATH);
+      if (schemaUrl == null) {
+        throw new RuntimeException("Schema file not found: " + SCHEMA_SQL_PATH);
+      }
+      
+      String schema = new String(java.nio.file.Files.readAllBytes(
+          java.nio.file.Path.of(schemaUrl.toURI())));
+          
+      // Execute the schema
+      stmt.execute(schema);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to initialize database schema", e);
+    }
   }
 
   @AfterAll

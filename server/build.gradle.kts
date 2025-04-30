@@ -107,6 +107,22 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
+// Task to copy database schema files to the test resources directory
+val copySchemaFiles = tasks.register<Copy>("copySchemaFiles") {
+    description = "Copies database schema files to the test resources directory"
+    group = "Build"
+    
+    from("${rootProject.projectDir}/database/initdb") {
+        include("00-extensions.sql")
+        include("01-schema.sql")
+    }
+    into("${layout.buildDirectory.get()}/resources/test/db")
+}
+
+// Make processTestResources depend on copySchemaFiles
+tasks.named("processTestResources") {
+    dependsOn(copySchemaFiles)
+}
 
 tasks.register<JavaExec>("debugRun") {
     group = "Debugging" // Assign it to the 'Debugging' group in './gradlew tasks' output

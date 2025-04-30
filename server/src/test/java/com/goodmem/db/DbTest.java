@@ -18,7 +18,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
-import org.testcontainers.utility.MountableFile;
 
 /**
  * Tests for the database layer.
@@ -28,40 +27,9 @@ import org.testcontainers.utility.MountableFile;
 @Testcontainers
 public class DbTest {
 
-  // Setup paths to the original schema files in the project
-  private static final String EXTENSIONS_SQL_PATH = findResourcePath("00-extensions.sql");
-  private static final String SCHEMA_SQL_PATH = findResourcePath("01-schema.sql");
-
-  /**
-   * Finds the path to a resource by trying multiple possible locations. This allows the tests to
-   * run from different working directories.
-   */
-  private static String findResourcePath(String filename) {
-    String[] possiblePaths = {
-      "database/initdb/" + filename,
-      "../database/initdb/" + filename,
-      "../../database/initdb/" + filename
-    };
-
-    for (String path : possiblePaths) {
-      if (java.nio.file.Files.exists(java.nio.file.Path.of(path))) {
-        return path;
-      }
-    }
-
-    // Fallback to absolute path - useful for development but should be avoided
-    String projectRoot = System.getProperty("user.dir");
-    if (projectRoot.endsWith("/server")) {
-      projectRoot = projectRoot.substring(0, projectRoot.length() - 7);
-    }
-    String absolutePath = projectRoot + "/database/initdb/" + filename;
-
-    if (java.nio.file.Files.exists(java.nio.file.Path.of(absolutePath))) {
-      return absolutePath;
-    }
-
-    throw new RuntimeException("Could not find SQL file: " + filename);
-  }
+  // Use classpath resources for schema files
+  private static final String EXTENSIONS_SQL_PATH = "/db/00-extensions.sql";
+  private static final String SCHEMA_SQL_PATH = "/db/01-schema.sql";
 
   /**
    * Use an official PostgreSQL image with pgvector extension.
@@ -75,12 +43,8 @@ public class DbTest {
           .withDatabaseName("goodmem")
           .withUsername("goodmem")
           .withPassword("goodmem")
-          .withCopyFileToContainer(
-              MountableFile.forHostPath(EXTENSIONS_SQL_PATH),
-              "/docker-entrypoint-initdb.d/00-extensions.sql")
-          .withCopyFileToContainer(
-              MountableFile.forHostPath(SCHEMA_SQL_PATH),
-              "/docker-entrypoint-initdb.d/01-schema.sql");
+          .withInitScript("db/00-extensions.sql"); // Executes the script from the classpath
+          // We'll add the schema in the setUp method
 
   private static Connection connection;
 
@@ -90,6 +54,23 @@ public class DbTest {
     connection =
         DriverManager.getConnection(
             postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+            
+    // Execute the schema script after the container is started
+    try (var stmt = connection.createStatement()) {
+      // Read schema file from classpath
+      var schemaUrl = DbTest.class.getResource(SCHEMA_SQL_PATH);
+      if (schemaUrl == null) {
+        throw new RuntimeException("Schema file not found: " + SCHEMA_SQL_PATH);
+      }
+      
+      String schema = new String(java.nio.file.Files.readAllBytes(
+          java.nio.file.Path.of(schemaUrl.toURI())));
+          
+      // Execute the schema
+      stmt.execute(schema);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to initialize database schema", e);
+    }
   }
 
   @AfterAll
