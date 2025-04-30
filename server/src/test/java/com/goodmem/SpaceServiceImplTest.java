@@ -14,6 +14,7 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import goodmem.v1.SpaceOuterClass;
 import goodmem.v1.SpaceOuterClass.CreateSpaceRequest;
+import goodmem.v1.SpaceOuterClass.DeleteSpaceRequest;
 import goodmem.v1.SpaceOuterClass.GetSpaceRequest;
 import goodmem.v1.SpaceOuterClass.Space;
 import goodmem.v1.UserOuterClass;
@@ -343,6 +344,67 @@ public class SpaceServiceImplTest {
       // Now verify the labels using our comparison logic
       assertTrue(compareLabels(manyLabelsRequest.getLabelsMap(), labelsFromDb),
           "Labels in database should match requested labels");
+          
+      // =========================================================================
+      // Step 9: Test deleteSpace functionality
+      // =========================================================================
+      System.out.println("\nStep 9: Test deleting a space and verifying it's gone");
+      
+      // Create a space specifically for deletion testing
+      TestStreamObserver<Space> deleteTestSpaceObserver = new TestStreamObserver<>();
+      CreateSpaceRequest deleteTestSpaceRequest = CreateSpaceRequest.newBuilder()
+          .setName("Space To Delete")
+          .putLabels("purpose", "deletion-test")
+          .setPublicRead(true)
+          .build();
+      
+      spaceService.createSpace(deleteTestSpaceRequest, deleteTestSpaceObserver);
+      
+      // Verify space was created successfully
+      assertFalse(deleteTestSpaceObserver.hasError(), 
+          "Create space for deletion test should not error: " + 
+          (deleteTestSpaceObserver.hasError() ? deleteTestSpaceObserver.getError().getMessage() : ""));
+      
+      Space spaceToDelete = deleteTestSpaceObserver.getValue();
+      UUID spaceToDeleteId = com.goodmem.db.util.UuidUtil.fromProtoBytes(spaceToDelete.getSpaceId()).getValue();
+      
+      System.out.println("Created space for deletion test, ID: " + spaceToDeleteId);
+      
+      // Verify the space exists in the database before deletion
+      assertTrue(spaceExistsInDatabase(spaceToDeleteId), 
+          "Space should exist before deletion");
+      
+      // Now delete the space
+      TestStreamObserver<Empty> deleteSpaceObserver = new TestStreamObserver<>();
+      DeleteSpaceRequest deleteSpaceRequest = DeleteSpaceRequest.newBuilder()
+          .setSpaceId(com.goodmem.db.util.UuidUtil.toProtoBytes(spaceToDeleteId))
+          .build();
+      
+      spaceService.deleteSpace(deleteSpaceRequest, deleteSpaceObserver);
+      
+      // Verify deletion was successful
+      assertFalse(deleteSpaceObserver.hasError(),
+          "Space deletion should not error: " + 
+          (deleteSpaceObserver.hasError() ? deleteSpaceObserver.getError().getMessage() : ""));
+      assertTrue(deleteSpaceObserver.isCompleted(), "Response should be completed");
+      
+      // Verify the space no longer exists in the database
+      assertFalse(spaceExistsInDatabase(spaceToDeleteId), 
+          "Space should not exist after deletion");
+      
+      // Try to delete the same space again (should fail with NOT_FOUND)
+      TestStreamObserver<Empty> deleteAgainObserver = new TestStreamObserver<>();
+      spaceService.deleteSpace(deleteSpaceRequest, deleteAgainObserver);
+      
+      // Verify the second deletion fails with NOT_FOUND
+      assertTrue(deleteAgainObserver.hasError(), 
+          "Second deletion of the same space should fail");
+      
+      StatusRuntimeException deleteException = (StatusRuntimeException) deleteAgainObserver.getError();
+      assertEquals(Status.NOT_FOUND.getCode(), deleteException.getStatus().getCode(),
+          "Error code should be NOT_FOUND");
+      assertTrue(deleteException.getStatus().getDescription().contains("not found"), 
+          "Error should mention space not found");
       
     } finally {
       previousContext.attach(); // Restore original context
@@ -492,6 +554,23 @@ public class SpaceServiceImplTest {
           } else {
             throw new RuntimeException("Space not found: " + spaceId);
           }
+        }
+      }
+    }
+  }
+  
+  /**
+   * Checks if a space exists in the database.
+   */
+  private boolean spaceExistsInDatabase(UUID spaceId) throws SQLException {
+    try (Connection conn = dataSource.getConnection()) {
+      String sql = "SELECT 1 FROM space WHERE space_id = ?";
+      
+      try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        stmt.setObject(1, spaceId);
+        
+        try (ResultSet rs = stmt.executeQuery()) {
+          return rs.next(); // Returns true if space exists
         }
       }
     }

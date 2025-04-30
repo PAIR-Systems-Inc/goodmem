@@ -229,17 +229,144 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
     responseObserver.onCompleted();
   }
 
+  /**
+   * Deletes a Space by ID.
+   *
+   * <p>The method follows these steps:
+   * 1. Retrieve the authenticated user from context
+   * 2. Validate the space ID format
+   * 3. Load the space to check ownership
+   * 4. Check permissions (DELETE_SPACE_OWN or DELETE_SPACE_ANY based on ownership)
+   * 5. Delete the space from the database
+   *
+   * <p>Possible error conditions:
+   * - UNAUTHENTICATED: No valid authentication provided
+   * - INVALID_ARGUMENT: Invalid space ID format
+   * - NOT_FOUND: Space with the given ID does not exist
+   * - PERMISSION_DENIED: User lacks necessary permissions to delete the space
+   * - INTERNAL: Database or other system errors
+   */
   @Override
   public void deleteSpace(DeleteSpaceRequest request, StreamObserver<Empty> responseObserver) {
-    Logger.info("Deleting space: {}", Uuids.bytesToHex(request.getSpaceId().toByteArray()));
+    // Get the authenticated user from the Context
+    com.goodmem.security.User authenticatedUser = com.goodmem.security.AuthInterceptor.USER_CONTEXT_KEY.get();
+    if (authenticatedUser == null) {
+      Logger.error("No authentication context found");
+      responseObserver.onError(
+          io.grpc.Status.UNAUTHENTICATED
+              .withDescription("Authentication required")
+              .asRuntimeException());
+      return;
+    }
 
-    // TODO: Validate space ID
-    // TODO: Check ownership
-    // TODO: Delete from database
-    // TODO: Clean up embedding index
+    // Validate and convert space ID
+    Logger.info("Deleting space: {}", Uuids.bytesToHex(request.getSpaceId()));
+    
+    com.goodmem.common.status.StatusOr<UUID> spaceIdOr = 
+        com.goodmem.db.util.UuidUtil.fromProtoBytes(request.getSpaceId());
+    
+    if (spaceIdOr.isNotOk()) {
+      Logger.error("Invalid space ID format: {}", spaceIdOr.getStatus().getMessage());
+      responseObserver.onError(
+          io.grpc.Status.INVALID_ARGUMENT
+              .withDescription("Invalid space ID format")
+              .asRuntimeException());
+      return;
+    }
+    
+    UUID spaceId = spaceIdOr.getValue();
 
-    responseObserver.onNext(Empty.getDefaultInstance());
-    responseObserver.onCompleted();
+    try (java.sql.Connection connection = config.dataSource().getConnection()) {
+      // Load the space to check ownership
+      com.goodmem.common.status.StatusOr<java.util.Optional<com.goodmem.db.Space>> spaceOr = 
+          com.goodmem.db.Spaces.loadById(connection, spaceId);
+          
+      if (spaceOr.isNotOk()) {
+        Logger.error("Error loading space: {}", spaceOr.getStatus().getMessage());
+        responseObserver.onError(
+            io.grpc.Status.INTERNAL
+                .withDescription("Unexpected error while processing request.")
+                .asRuntimeException());
+        return;
+      }
+      
+      // Check if space exists
+      if (spaceOr.getValue().isEmpty()) {
+        Logger.error("Space not found: {}", spaceId);
+        responseObserver.onError(
+            io.grpc.Status.NOT_FOUND
+                .withDescription("Space not found")
+                .asRuntimeException());
+        return;
+      }
+      
+      com.goodmem.db.Space space = spaceOr.getValue().get();
+      
+      // Check permissions based on ownership
+      boolean isOwner = space.ownerId().equals(authenticatedUser.getId());
+      boolean hasAnyPermission = authenticatedUser.hasPermission(com.goodmem.security.Permission.DELETE_SPACE_ANY);
+      boolean hasOwnPermission = authenticatedUser.hasPermission(com.goodmem.security.Permission.DELETE_SPACE_OWN);
+      
+      // If user is not the owner, they must have DELETE_SPACE_ANY permission
+      if (!isOwner && !hasAnyPermission) {
+        Logger.error("User lacks permission to delete spaces owned by others");
+        responseObserver.onError(
+            io.grpc.Status.PERMISSION_DENIED
+                .withDescription("Permission denied")
+                .asRuntimeException());
+        return;
+      }
+      
+      // If user is the owner, they must have at least DELETE_SPACE_OWN permission
+      if (isOwner && !hasAnyPermission && !hasOwnPermission) {
+        Logger.error("User lacks necessary permissions to delete their own spaces");
+        responseObserver.onError(
+            io.grpc.Status.PERMISSION_DENIED
+                .withDescription("Permission denied")
+                .asRuntimeException());
+        return;
+      }
+      
+      // Delete the space from the database
+      com.goodmem.common.status.StatusOr<Integer> deleteResult = com.goodmem.db.Spaces.delete(connection, spaceId);
+      
+      if (deleteResult.isNotOk()) {
+        Logger.error("Failed to delete space: {}", deleteResult.getStatus().getMessage());
+        responseObserver.onError(
+            io.grpc.Status.INTERNAL
+                .withDescription("Unexpected error while processing request.")
+                .asRuntimeException());
+        return;
+      }
+      
+      // Ensure the space was actually deleted
+      if (deleteResult.getValue() == 0) {
+        Logger.error("Space not found during delete operation: {}", spaceId);
+        responseObserver.onError(
+            io.grpc.Status.NOT_FOUND
+                .withDescription("Space not found")
+                .asRuntimeException());
+        return;
+      }
+      
+      // Success - return empty response
+      responseObserver.onNext(Empty.getDefaultInstance());
+      responseObserver.onCompleted();
+      Logger.info("Space deleted successfully: {}", spaceId);
+      
+    } catch (java.sql.SQLException e) {
+      Logger.error(e, "Database error during space deletion: {}", e.getMessage());
+      responseObserver.onError(
+          io.grpc.Status.INTERNAL
+              .withDescription("Unexpected error while processing request.")
+              .asRuntimeException());
+    } catch (Exception e) {
+      Logger.error(e, "Unexpected error during space deletion: {}", e.getMessage());
+      responseObserver.onError(
+          io.grpc.Status.INTERNAL
+              .withDescription("Unexpected error while processing request.")
+              .asRuntimeException());
+    }
   }
 
   @Override
