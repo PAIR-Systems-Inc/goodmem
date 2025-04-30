@@ -19,9 +19,35 @@ package com.goodmem.security;
  */
 public enum Permission {
 
+  // User permissions
   /** Permission for a user to view himself. */
   DISPLAY_USER_OWN,
 
   /** Permission for a user to view any user in the system. */
-  DISPLAY_USER_ANY;
+  DISPLAY_USER_ANY,
+  
+  // Space permissions
+  /** Permission for a user to create spaces for themselves. */
+  CREATE_SPACE_OWN,
+  
+  /** Permission for a user to create spaces for any user. */
+  CREATE_SPACE_ANY,
+  
+  /** Permission for a user to view their own spaces. */
+  DISPLAY_SPACE_OWN,
+  
+  /** Permission for a user to view any space in the system. */
+  DISPLAY_SPACE_ANY,
+  
+  /** Permission for a user to update their own spaces. */
+  UPDATE_SPACE_OWN,
+  
+  /** Permission for a user to update any space in the system. */
+  UPDATE_SPACE_ANY,
+  
+  /** Permission for a user to delete their own spaces. */
+  DELETE_SPACE_OWN,
+  
+  /** Permission for a user to delete any space in the system. */
+  DELETE_SPACE_ANY;
 }

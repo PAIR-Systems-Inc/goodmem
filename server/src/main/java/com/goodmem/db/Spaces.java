@@ -1,5 +1,6 @@
 package com.goodmem.db;
 
+import com.goodmem.common.status.Status;
 import com.goodmem.common.status.StatusOr;
 import com.goodmem.db.util.DbUtil;
 import com.google.common.collect.ImmutableList;
@@ -184,9 +185,11 @@ public final class Spaces {
       stmt.setObject(2, space.ownerId());
       stmt.setString(3, space.name());
 
-      // Note: In a real implementation, this would use proper JSONB handling
-      // For example: stmt.setObject(4, space.labels(), Types.OTHER);
-      stmt.setObject(4, null); // Placeholder for JSONB
+      // Process and set the labels as JSONB
+      Status labelsStatus = DbUtil.setJsonbParameter(stmt, 4, space.labels());
+      if (!labelsStatus.isOk()) {
+        return StatusOr.ofStatus(labelsStatus);
+      }
 
       stmt.setString(5, space.embeddingModel());
       stmt.setBoolean(6, space.publicRead());
@@ -242,10 +245,12 @@ public final class Spaces {
     String embeddingModel = rs.getString("embedding_model");
     boolean publicRead = rs.getBoolean("public_read");
 
-    // Note: In a real implementation, you would use proper JSONB parsing
-    // For example:
-    // StatusOr<Map<String, String>> labelsOr = DbUtil.parseJsonbToMap(rs, "labels");
-    Map<String, String> labels = Map.of(); // Placeholder for JSONB
+    // Parse the JSONB labels
+    StatusOr<Map<String, String>> labelsOr = DbUtil.parseJsonbToMap(rs, "labels");
+    if (labelsOr.isNotOk()) {
+      return StatusOr.ofStatus(labelsOr.getStatus());
+    }
+    Map<String, String> labels = labelsOr.getValue();
 
     StatusOr<Instant> createdAtOr = DbUtil.getInstant(rs, "created_at");
     if (createdAtOr.isNotOk()) {

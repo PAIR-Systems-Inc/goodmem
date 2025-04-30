@@ -91,7 +91,12 @@ public enum Roles {
    * using the core functionality of the system.
    */
   USER(
-      new BaseRoleImpl(Permission.DISPLAY_USER_OWN) {
+      new BaseRoleImpl(
+          Permission.DISPLAY_USER_OWN,
+          Permission.CREATE_SPACE_OWN,
+          Permission.DISPLAY_SPACE_OWN,
+          Permission.UPDATE_SPACE_OWN,
+          Permission.DELETE_SPACE_OWN) {
         @Override
         public String getName() {
           return "USER";

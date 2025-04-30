@@ -31,38 +31,174 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
     this.config = config;
   }
 
+  /**
+   * Creates a new Space with the owner and creator derived from authentication context.
+   *
+   * <p>The method follows these steps:
+   * 1. Retrieve the authenticated user from context
+   * 2. Check permissions (CREATE_SPACE_OWN or CREATE_SPACE_ANY based on context)
+   * 3. Validate request fields
+   * 4. Determine owner (from request if specified, otherwise from authenticated user)
+   * 5. Check if a space with the same name already exists for this owner
+   * 6. Persist the new space in the database
+   *
+   * <p>Possible error conditions:
+   * - UNAUTHENTICATED: No valid authentication provided
+   * - PERMISSION_DENIED: User lacks necessary permissions to create spaces
+   * - INVALID_ARGUMENT: Required fields missing or invalid
+   * - ALREADY_EXISTS: A space with the same name already exists for this owner
+   * - INTERNAL: Database or other system errors
+   */
   @Override
   public void createSpace(CreateSpaceRequest request, StreamObserver<Space> responseObserver) {
     Logger.info("Creating space: {}", request.getName());
 
-    // TODO: Validate request fields
-    // TODO: Generate proper UUID
-    // TODO: Persist in database
-    // TODO: Create embedding index
+    // Get the authenticated user from the Context
+    com.goodmem.security.User authenticatedUser = com.goodmem.security.AuthInterceptor.USER_CONTEXT_KEY.get();
+    if (authenticatedUser == null) {
+      Logger.error("No authentication context found");
+      responseObserver.onError(
+          io.grpc.Status.UNAUTHENTICATED
+              .withDescription("Authentication required")
+              .asRuntimeException());
+      return;
+    }
 
-    // For now, return dummy data
-    Space space =
-        Space.newBuilder()
-            .setSpaceId(Uuids.getBytesFromUUID(UUID.randomUUID()))
-            .setName(request.getName())
-            .putAllLabels(request.getLabelsMap())
-            .setEmbeddingModel(
-                request.getEmbeddingModel().isEmpty()
-                    ? config.defaultEmbeddingModel()
-                    : request.getEmbeddingModel())
-            .setCreatedAt(getCurrentTimestamp())
-            .setUpdatedAt(getCurrentTimestamp())
-            .setOwnerId(
-                Uuids.getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth context
-            .setCreatedById(
-                Uuids.getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth context
-            .setUpdatedById(
-                Uuids.getBytesFromUUID(UUID.randomUUID())) // This would be derived from auth context
-            .setPublicRead(request.getPublicRead())
-            .build();
+    // Check permissions based on whether owner_id is specified
+    boolean ownerIdProvided = request.hasOwnerId() && !request.getOwnerId().isEmpty();
+    boolean hasAnyPermission = authenticatedUser.hasPermission(com.goodmem.security.Permission.CREATE_SPACE_ANY);
+    boolean hasOwnPermission = authenticatedUser.hasPermission(com.goodmem.security.Permission.CREATE_SPACE_OWN);
+    
+    // If trying to create a space for another user, must have CREATE_SPACE_ANY permission
+    UUID ownerId;
+    if (ownerIdProvided) {
+      com.goodmem.common.status.StatusOr<UUID> ownerIdOr = 
+          com.goodmem.db.util.UuidUtil.fromProtoBytes(request.getOwnerId());
+      
+      if (ownerIdOr.isNotOk()) {
+        Logger.error("Invalid owner ID format: {}", ownerIdOr.getStatus().getMessage());
+        responseObserver.onError(
+            io.grpc.Status.INVALID_ARGUMENT
+                .withDescription("Invalid owner ID format")
+                .asRuntimeException());
+        return;
+      }
+      
+      ownerId = ownerIdOr.getValue();
+      
+      // If owner_id specified and not equal to authenticated user, require CREATE_SPACE_ANY permission
+      if (!ownerId.equals(authenticatedUser.getId()) && !hasAnyPermission) {
+        Logger.error("User lacks permission to create spaces for other users");
+        responseObserver.onError(
+            io.grpc.Status.PERMISSION_DENIED
+                .withDescription("Permission denied")
+                .asRuntimeException());
+        return;
+      }
+    } else {
+      // No owner_id provided, use authenticated user's ID
+      ownerId = authenticatedUser.getId();
+      
+      // Must have at least CREATE_SPACE_OWN permission
+      if (!hasAnyPermission && !hasOwnPermission) {
+        Logger.error("User lacks necessary permissions to create spaces");
+        responseObserver.onError(
+            io.grpc.Status.PERMISSION_DENIED
+                .withDescription("Permission denied")
+                .asRuntimeException());
+        return;
+      }
+    }
 
-    responseObserver.onNext(space);
-    responseObserver.onCompleted();
+    // Validate required fields
+    if (request.getName() == null || request.getName().trim().isEmpty()) {
+      Logger.error("Space name is required");
+      responseObserver.onError(
+          io.grpc.Status.INVALID_ARGUMENT
+              .withDescription("Space name is required")
+              .asRuntimeException());
+      return;
+    }
+
+    // Creator is always the authenticated user
+    UUID creatorId = authenticatedUser.getId();
+
+    // Determine the embedding model to use (default if not specified)
+    String embeddingModel = request.getEmbeddingModel();
+    if (embeddingModel == null || embeddingModel.isEmpty()) {
+      embeddingModel = config.defaultEmbeddingModel();
+    }
+
+    try (java.sql.Connection connection = config.dataSource().getConnection()) {
+      // Check if a space with the same name already exists for this owner
+      com.goodmem.common.status.StatusOr<java.util.Optional<com.goodmem.db.Space>> existingSpaceOr = 
+          com.goodmem.db.Spaces.loadByOwnerAndName(connection, ownerId, request.getName());
+          
+      if (existingSpaceOr.isNotOk()) {
+        Logger.error("Error checking for existing space: {}", existingSpaceOr.getStatus().getMessage());
+        responseObserver.onError(
+            io.grpc.Status.INTERNAL
+                .withDescription("Unexpected error while processing request.")
+                .asRuntimeException());
+        return;
+      }
+      
+      if (existingSpaceOr.getValue().isPresent()) {
+        Logger.error("Space with name '{}' already exists for this owner", request.getName());
+        responseObserver.onError(
+            io.grpc.Status.ALREADY_EXISTS
+                .withDescription("A space with this name already exists")
+                .asRuntimeException());
+        return;
+      }
+      
+      // Create a new space record
+      UUID spaceId = UUID.randomUUID();
+      java.time.Instant now = java.time.Instant.now();
+      
+      com.goodmem.db.Space spaceRecord = new com.goodmem.db.Space(
+          spaceId,
+          ownerId,
+          request.getName(),
+          request.getLabelsMap(),
+          embeddingModel,
+          request.getPublicRead(),
+          now,
+          now,
+          creatorId,
+          creatorId
+      );
+      
+      // Persist the space record in the database
+      com.goodmem.common.status.StatusOr<Integer> saveResult = com.goodmem.db.Spaces.save(connection, spaceRecord);
+      
+      if (saveResult.isNotOk()) {
+        Logger.error("Failed to save space: {}", saveResult.getStatus().getMessage());
+        responseObserver.onError(
+            io.grpc.Status.INTERNAL
+                .withDescription("Unexpected error while processing request.")
+                .asRuntimeException());
+        return;
+      }
+      
+      // Convert the database record to a proto message and return it
+      Space protoSpace = spaceRecord.toProto();
+      responseObserver.onNext(protoSpace);
+      responseObserver.onCompleted();
+      
+    } catch (java.sql.SQLException e) {
+      Logger.error(e, "Database error during space creation: {}", e.getMessage());
+      responseObserver.onError(
+          io.grpc.Status.INTERNAL
+              .withDescription("Unexpected error while processing request.")
+              .asRuntimeException());
+    } catch (Exception e) {
+      Logger.error(e, "Unexpected error during space creation: {}", e.getMessage());
+      responseObserver.onError(
+          io.grpc.Status.INTERNAL
+              .withDescription("Unexpected error while processing request.")
+              .asRuntimeException());
+    }
   }
 
   @Override
