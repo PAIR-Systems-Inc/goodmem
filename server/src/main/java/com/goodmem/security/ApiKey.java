@@ -213,7 +213,20 @@ public record ApiKey(
     }
     
     try {
-      byte[] hashedBytes = hashBytes(keyString.getBytes());
+      // Extract the base32 encoded part (remove the prefix)
+      String encodedPart = keyString.substring(KEY_PREFIX.length());
+      
+      // Decode from Base32 to get the original key material bytes
+      byte[] keyMaterialBytes;
+      try {
+        keyMaterialBytes = KEY_ENCODING.decode(encodedPart.toUpperCase());
+      } catch (IllegalArgumentException e) {
+        return com.goodmem.common.status.StatusOr.ofStatus(
+            com.goodmem.common.status.Status.invalidArgument("Invalid API key format: not valid base32 encoding"));
+      }
+      
+      // Hash the decoded key material bytes
+      byte[] hashedBytes = hashBytes(keyMaterialBytes);
       return com.goodmem.common.status.StatusOr.ofValue(ByteString.copyFrom(hashedBytes));
     } catch (UnsupportedOperationException e) {
       return com.goodmem.common.status.StatusOr.ofStatus(

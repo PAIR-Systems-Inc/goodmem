@@ -104,8 +104,8 @@ public class SystemInitOperation {
             com.goodmem.security.ApiKey key = com.goodmem.security.ApiKey.newKey(random);
 
             UUID apiKeyId = UUID.randomUUID();
-            String rawApiKey = "gm_" + UUID.randomUUID().toString().replace("-", "");
-            String keyPrefix = rawApiKey.substring(0, Math.min(rawApiKey.length(), 10));
+            String rawApiKey = key.keyString(); // Use the properly generated API key string
+            String keyPrefix = key.displayPrefix(); // Use the display prefix from the API key
             ByteString keyHash = key.hashedKeyMaterial();
 
             ApiKey apiKey = new ApiKey(

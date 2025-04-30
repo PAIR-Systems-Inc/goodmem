@@ -2,56 +2,50 @@ package com.goodmem;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.goodmem.db.User;
-import com.goodmem.db.Users;
 import com.goodmem.db.util.PostgresTestHelper;
 import com.goodmem.db.util.PostgresTestHelper.PostgresContext;
-import com.goodmem.operations.SystemInitOperation;
 import com.goodmem.security.AuthInterceptor;
-import com.goodmem.security.Permission;
-import com.google.gson.JsonObject;
 import com.google.protobuf.ByteString;
-import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import goodmem.v1.UserOuterClass;
 import goodmem.v1.UserOuterClass.GetUserRequest;
 import goodmem.v1.UserOuterClass.InitializeSystemRequest;
 import goodmem.v1.UserOuterClass.InitializeSystemResponse;
 import io.grpc.Context;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Order;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.TestMethodOrder;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Integration tests for UserServiceImpl that verify functionality with a real PostgreSQL database.
  *
- * <p>Tests initialize the system, verify user retrieval, and validate error conditions.
+ * <p>This test follows a sequential workflow to test API key authentication and user operations:
+ * 1. Initialize the system and get a root user and API key
+ * 2. Verify the system reports as already initialized on second attempt
+ * 3. Use the API key to authenticate and retrieve the root user
+ * 4. Retrieve the root user by UUID
+ * 5. Retrieve the root user by email
+ * 6. Test error handling for invalid UUID
+ * 7. Test error handling for invalid email
  */
 @Testcontainers
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class UserServiceImplTest {
 
   private static PostgresContext postgresContext;
   private static HikariDataSource dataSource;
   private static UserServiceImpl userService;
-  private static SystemInitOperation.InitResult initResult;
+  private static AuthInterceptor authInterceptor;
 
   @BeforeAll
   static void setUp() throws SQLException {
@@ -69,13 +63,8 @@ public class UserServiceImplTest {
     // Create the UserServiceImpl with the test datasource
     userService = new UserServiceImpl(new UserServiceImpl.Config(dataSource));
     
-    // Set up the root user manually for tests
-    try (Connection connection = dataSource.getConnection()) {
-      SystemInitOperation operation = new SystemInitOperation(connection);
-      initResult = operation.execute();
-      assertTrue(initResult.isSuccess(), "System initialization should succeed");
-      assertFalse(initResult.alreadyInitialized(), "System should not be already initialized");
-    }
+    // Create the AuthInterceptor with the test datasource
+    authInterceptor = new AuthInterceptor(dataSource);
   }
 
   @AfterAll
@@ -90,298 +79,240 @@ public class UserServiceImplTest {
   }
 
   @Test
-  @Order(1)
-  void initializeSystem_ShouldSucceedFirstTime() {
-    // Verify that our setup already initialized the system
-    assertNotNull(initResult.apiKey(), "API key should not be null");
-    assertNotNull(initResult.userId(), "User ID should not be null");
-  }
-
-  @Test
-  @Order(2)
-  void initializeSystem_ShouldIndicateAlreadyInitialized() {
-    // Create a test observer for the response
-    TestStreamObserver<InitializeSystemResponse> responseObserver = new TestStreamObserver<>();
+  void testUserServiceOperations() throws SQLException {
+    // =========================================================================
+    // Step 1: Initialize the system
+    // =========================================================================
+    System.out.println("Step 1: Initialize the system");
     
-    // Call the service method
-    userService.initializeSystem(InitializeSystemRequest.newBuilder().build(), responseObserver);
+    TestStreamObserver<InitializeSystemResponse> initObserver = new TestStreamObserver<>();
+    userService.initializeSystem(InitializeSystemRequest.newBuilder().build(), initObserver);
     
-    // Verify the response indicates the system is already initialized
-    assertFalse(responseObserver.hasError(), "Should not have error: " + responseObserver.getError());
-    assertTrue(responseObserver.hasValue(), "Should have response value");
+    // Verify successful initialization
+    assertFalse(initObserver.hasError(), 
+        "System initialization should not error: " + (initObserver.hasError() ? initObserver.getError().getMessage() : ""));
+    assertTrue(initObserver.hasValue(), "Should have initialization response");
+    assertTrue(initObserver.isCompleted(), "Observer should be completed");
     
-    InitializeSystemResponse response = responseObserver.getValue();
-    assertTrue(response.getAlreadyInitialized(), "System should be marked as already initialized");
-    assertEquals("System is already initialized", response.getMessage());
-    assertEquals("", response.getRootApiKey(), "Should not include API key for already initialized system");
-    assertEquals(ByteString.EMPTY, response.getUserId(), "Should not include user ID for already initialized system");
-  }
-
-  @Test
-  @Order(3)
-  void getUser_NoArgs_ShouldReturnRootUser() {
-    // Get the root user ID from the init result
-    UUID rootUserId = initResult.userId();
+    InitializeSystemResponse initResponse = initObserver.getValue();
+    assertFalse(initResponse.getAlreadyInitialized(), "System should not already be initialized");
+    assertEquals("System initialized successfully", initResponse.getMessage());
+    assertFalse(initResponse.getRootApiKey().isEmpty(), "API key should be provided");
+    assertFalse(initResponse.getUserId().isEmpty(), "User ID should be provided");
     
-    // Create an authenticated context with admin permissions
-    Set<Permission> permissions = new HashSet<>();
-    permissions.add(Permission.DISPLAY_USER_ANY);
-    MockUser authUser = new MockUser(rootUserId, "root@goodmem.ai", "System Root User", permissions);
+    // Extract and store the root API key and user ID for subsequent tests
+    String rootApiKey = initResponse.getRootApiKey();
+    ByteString rootUserIdBytes = initResponse.getUserId();
+    // Convert ByteString to UUID using ByteBuffer
+    UUID rootUserId = UUID.fromString(com.goodmem.db.util.UuidUtil.fromProtoBytes(rootUserIdBytes).getValue().toString());
     
-    // Set the authenticated user in the Context
-    Context context = Context.current().withValue(AuthInterceptor.USER_CONTEXT_KEY, authUser);
-    Context previousContext = context.attach();
+    System.out.println("Root API Key: " + rootApiKey);
+    System.out.println("Root User ID: " + rootUserId);
     
-    try {
-      // Create a test observer for the response
-      TestStreamObserver<UserOuterClass.User> responseObserver = new TestStreamObserver<>();
-      
-      // Call getUser with no arguments (should return current user)
-      userService.getUser(GetUserRequest.newBuilder().build(), responseObserver);
-      
-      // Verify response
-      assertFalse(responseObserver.hasError(), 
-          "Should not have error: " + (responseObserver.hasError() ? responseObserver.getError().getMessage() : ""));
-      assertTrue(responseObserver.hasValue(), "Should have response value");
-      
-      UserOuterClass.User user = responseObserver.getValue();
-      assertEquals(Uuids.getBytesFromUUID(rootUserId), user.getUserId());
-      assertEquals("root", user.getUsername());
-      assertEquals("root@goodmem.ai", user.getEmail());
-      assertEquals("System Root User", user.getDisplayName());
-    } finally {
-      // Clean up context
-      context.detach(previousContext);
+    // =========================================================================
+    // Step 2: Initialize the system again (should report already initialized)
+    // =========================================================================
+    System.out.println("\nStep 2: Initialize the system again");
+    
+    TestStreamObserver<InitializeSystemResponse> reInitObserver = new TestStreamObserver<>();
+    userService.initializeSystem(InitializeSystemRequest.newBuilder().build(), reInitObserver);
+    
+    // Verify "already initialized" response
+    assertFalse(reInitObserver.hasError(), "Re-initialization should not error");
+    assertTrue(reInitObserver.hasValue(), "Should have re-initialization response");
+    
+    InitializeSystemResponse reInitResponse = reInitObserver.getValue();
+    assertTrue(reInitResponse.getAlreadyInitialized(), "System should be marked as already initialized");
+    assertEquals("System is already initialized", reInitResponse.getMessage());
+    assertEquals("", reInitResponse.getRootApiKey(), "API key should not be included");
+    assertEquals(ByteString.EMPTY, reInitResponse.getUserId(), "User ID should not be included");
+    
+    // =========================================================================
+    // Step 3: Authenticate using API key and retrieve current user
+    // =========================================================================
+    System.out.println("\nStep 3: Authenticate with API key and get current user");
+    
+    // Create metadata with API key
+    Metadata metadata = new Metadata();
+    Metadata.Key<String> apiKeyMetadataKey = Metadata.Key.of("x-api-key", Metadata.ASCII_STRING_MARSHALLER);
+    metadata.put(apiKeyMetadataKey, rootApiKey);
+    
+    // Instead of mocking the interceptor, directly authenticate the way AuthInterceptor does
+    try (java.sql.Connection conn = dataSource.getConnection()) {
+        // Look up user by API key
+        com.goodmem.common.status.StatusOr<java.util.Optional<com.goodmem.db.ApiKeys.UserWithApiKey>> userOr = 
+            com.goodmem.db.ApiKeys.getUserByApiKey(conn, rootApiKey);
+            
+        assertFalse(userOr.isNotOk(), "API key lookup should succeed");
+        assertTrue(userOr.getValue().isPresent(), "Should find user with API key");
+        
+        // Get the user and create a security user
+        com.goodmem.db.User dbUser = userOr.getValue().get().user();
+        com.goodmem.security.Role role = com.goodmem.security.Roles.ADMIN.role();
+        com.goodmem.security.User securityUser = new com.goodmem.security.DefaultUserImpl(dbUser, role);
+        
+        // Create an authenticated context with the security user
+        Context authenticatedContext = Context.current().withValue(AuthInterceptor.USER_CONTEXT_KEY, securityUser);
+        Context currentContext = Context.current(); // Save the current context
+        authenticatedContext.attach(); // Attach the authenticated context
+        
+        // Now perform a user lookup without specifying any user (should return the current authenticated user)
+        TestStreamObserver<UserOuterClass.User> currentUserObserver = new TestStreamObserver<>();
+    
+        try {
+            userService.getUser(GetUserRequest.newBuilder().build(), currentUserObserver);
+            
+            // Verify current user lookup response
+            assertFalse(currentUserObserver.hasError(), 
+                "Current user lookup should not error: " + 
+                (currentUserObserver.hasError() ? currentUserObserver.getError().getMessage() : ""));
+            assertTrue(currentUserObserver.hasValue(), "Should have user response");
+            
+            UserOuterClass.User user = currentUserObserver.getValue();
+            assertEquals(rootUserIdBytes, user.getUserId(), "User ID should match root user");
+            assertEquals("root", user.getUsername(), "Username should be root");
+            assertEquals("root@goodmem.ai", user.getEmail(), "Email should match root user");
+            assertEquals("System Root User", user.getDisplayName(), "Display name should match root user");
+        } finally {
+            currentContext.attach(); // Restore the original context
+        }
+    }
+    
+    // =========================================================================
+    // Step 4: Retrieve user by UUID
+    // =========================================================================
+    System.out.println("\nStep 4: Retrieve user by UUID");
+    
+    // Reauthenticate for next tests
+    try (java.sql.Connection conn = dataSource.getConnection()) {
+        // Look up user by API key
+        com.goodmem.common.status.StatusOr<java.util.Optional<com.goodmem.db.ApiKeys.UserWithApiKey>> userOr = 
+            com.goodmem.db.ApiKeys.getUserByApiKey(conn, rootApiKey);
+            
+        // Get the user and create a security user
+        com.goodmem.db.User dbUser = userOr.getValue().get().user();
+        com.goodmem.security.Role role = com.goodmem.security.Roles.ADMIN.role();
+        com.goodmem.security.User securityUser = new com.goodmem.security.DefaultUserImpl(dbUser, role);
+        
+        // Create an authenticated context with the security user
+        Context authenticatedContext = Context.current().withValue(AuthInterceptor.USER_CONTEXT_KEY, securityUser);
+        Context currentContext = Context.current(); // Save the current context
+        
+        // Test UUID lookup
+        TestStreamObserver<UserOuterClass.User> uuidLookupObserver = new TestStreamObserver<>();
+        authenticatedContext.attach(); // Attach the authenticated context
+        
+        try {
+            userService.getUser(
+                GetUserRequest.newBuilder()
+                    .setUserId(rootUserIdBytes)
+                    .build(), 
+                uuidLookupObserver);
+            
+            // Verify UUID lookup response
+            assertFalse(uuidLookupObserver.hasError(), 
+                "UUID lookup should not error: " + 
+                (uuidLookupObserver.hasError() ? uuidLookupObserver.getError().getMessage() : ""));
+            assertTrue(uuidLookupObserver.hasValue(), "Should have user response for UUID lookup");
+            
+            UserOuterClass.User user = uuidLookupObserver.getValue();
+            assertEquals(rootUserIdBytes, user.getUserId(), "User ID should match root user");
+            assertEquals("root", user.getUsername(), "Username should be root");
+            assertEquals("root@goodmem.ai", user.getEmail(), "Email should match root user");
+            assertEquals("System Root User", user.getDisplayName(), "Display name should match root user");
+        } finally {
+            currentContext.attach(); // Restore the original context
+        }
+        
+        // =========================================================================
+        // Step 5: Retrieve user by email
+        // =========================================================================
+        System.out.println("\nStep 5: Retrieve user by email");
+        
+        TestStreamObserver<UserOuterClass.User> emailLookupObserver = new TestStreamObserver<>();
+        authenticatedContext.attach(); // Attach the authenticated context
+        
+        try {
+            userService.getUser(
+                GetUserRequest.newBuilder()
+                    .setEmail("root@goodmem.ai")
+                    .build(), 
+                emailLookupObserver);
+            
+            // Verify email lookup response
+            assertFalse(emailLookupObserver.hasError(), 
+                "Email lookup should not error: " + 
+                (emailLookupObserver.hasError() ? emailLookupObserver.getError().getMessage() : ""));
+            assertTrue(emailLookupObserver.hasValue(), "Should have user response for email lookup");
+            
+            UserOuterClass.User user = emailLookupObserver.getValue();
+            assertEquals(rootUserIdBytes, user.getUserId(), "User ID should match root user");
+            assertEquals("root", user.getUsername(), "Username should be root");
+            assertEquals("root@goodmem.ai", user.getEmail(), "Email should match root user");
+            assertEquals("System Root User", user.getDisplayName(), "Display name should match root user");
+        } finally {
+            currentContext.attach(); // Restore the original context
+        }
+        
+        // =========================================================================
+        // Step 6: Test invalid UUID lookup
+        // =========================================================================
+        System.out.println("\nStep 6: Test invalid UUID lookup");
+        
+        TestStreamObserver<UserOuterClass.User> invalidUuidObserver = new TestStreamObserver<>();
+        authenticatedContext.attach(); // Attach the authenticated context
+        
+        try {
+            // Generate a random UUID that doesn't exist
+            UUID nonExistentUserId = UUID.randomUUID();
+            ByteString nonExistentIdBytes = Uuids.getBytesFromUUID(nonExistentUserId);
+            
+            userService.getUser(
+                GetUserRequest.newBuilder()
+                    .setUserId(nonExistentIdBytes)
+                    .build(), 
+                invalidUuidObserver);
+            
+            // Verify invalid UUID response
+            assertTrue(invalidUuidObserver.hasError(), "Invalid UUID lookup should return an error");
+            StatusRuntimeException exception = (StatusRuntimeException) invalidUuidObserver.getError();
+            assertEquals(Status.NOT_FOUND.getCode(), exception.getStatus().getCode(), 
+                         "Error should be NOT_FOUND");
+            assertTrue(exception.getStatus().getDescription().contains("User not found"), 
+                       "Error should mention user not found");
+        } finally {
+            currentContext.attach(); // Restore the original context
+        }
+        
+        // =========================================================================
+        // Step 7: Test invalid email lookup
+        // =========================================================================
+        System.out.println("\nStep 7: Test invalid email lookup");
+        
+        TestStreamObserver<UserOuterClass.User> invalidEmailObserver = new TestStreamObserver<>();
+        authenticatedContext.attach(); // Attach the authenticated context
+        
+        try {
+            userService.getUser(
+                GetUserRequest.newBuilder()
+                    .setEmail("nonexistent@example.com")
+                    .build(), 
+                invalidEmailObserver);
+            
+            // Verify invalid email response
+            assertTrue(invalidEmailObserver.hasError(), "Invalid email lookup should return an error");
+            StatusRuntimeException exception = (StatusRuntimeException) invalidEmailObserver.getError();
+            assertEquals(Status.NOT_FOUND.getCode(), exception.getStatus().getCode(), 
+                         "Error should be NOT_FOUND");
+            assertTrue(exception.getStatus().getDescription().contains("User not found"), 
+                       "Error should mention user not found");
+        } finally {
+            currentContext.attach(); // Restore the original context
+        }
     }
   }
 
-  @Test
-  @Order(4)
-  void getUser_WithUuid_ShouldReturnUser() {
-    // Get the root user ID from the init result
-    UUID rootUserId = initResult.userId();
-    
-    // Create an authenticated context with admin permissions
-    Set<Permission> permissions = new HashSet<>();
-    permissions.add(Permission.DISPLAY_USER_ANY);
-    MockUser authUser = new MockUser(rootUserId, "root@goodmem.ai", "System Root User", permissions);
-    
-    // Set the authenticated user in the Context
-    Context context = Context.current().withValue(AuthInterceptor.USER_CONTEXT_KEY, authUser);
-    Context previousContext = context.attach();
-    
-    try {
-      // Create a test observer for the response
-      TestStreamObserver<UserOuterClass.User> responseObserver = new TestStreamObserver<>();
-      
-      // Call getUser with specific user ID
-      ByteString userIdBytes = Uuids.getBytesFromUUID(rootUserId);
-      userService.getUser(
-          GetUserRequest.newBuilder()
-              .setUserId(userIdBytes)
-              .build(),
-          responseObserver);
-      
-      // Verify response
-      assertFalse(responseObserver.hasError(), 
-          "Should not have error: " + (responseObserver.hasError() ? responseObserver.getError().getMessage() : ""));
-      assertTrue(responseObserver.hasValue(), "Should have response value");
-      
-      UserOuterClass.User user = responseObserver.getValue();
-      assertEquals(Uuids.getBytesFromUUID(rootUserId), user.getUserId());
-      assertEquals("root", user.getUsername());
-      assertEquals("root@goodmem.ai", user.getEmail());
-      assertEquals("System Root User", user.getDisplayName());
-    } finally {
-      // Clean up context
-      context.detach(previousContext);
-    }
-  }
-
-  @Test
-  @Order(5)
-  void getUser_WithEmail_ShouldReturnUser() {
-    // Get the root user ID from the init result
-    UUID rootUserId = initResult.userId();
-    
-    // Create an authenticated context with admin permissions
-    Set<Permission> permissions = new HashSet<>();
-    permissions.add(Permission.DISPLAY_USER_ANY);
-    MockUser authUser = new MockUser(rootUserId, "root@goodmem.ai", "System Root User", permissions);
-    
-    // Set the authenticated user in the Context
-    Context context = Context.current().withValue(AuthInterceptor.USER_CONTEXT_KEY, authUser);
-    Context previousContext = context.attach();
-    
-    try {
-      // Create a test observer for the response
-      TestStreamObserver<UserOuterClass.User> responseObserver = new TestStreamObserver<>();
-      
-      // Call getUser with email
-      userService.getUser(
-          GetUserRequest.newBuilder()
-              .setEmail("root@goodmem.ai")
-              .build(),
-          responseObserver);
-      
-      // Verify response
-      assertFalse(responseObserver.hasError(), 
-          "Should not have error: " + (responseObserver.hasError() ? responseObserver.getError().getMessage() : ""));
-      assertTrue(responseObserver.hasValue(), "Should have response value");
-      
-      UserOuterClass.User user = responseObserver.getValue();
-      assertEquals(Uuids.getBytesFromUUID(rootUserId), user.getUserId());
-      assertEquals("root", user.getUsername());
-      assertEquals("root@goodmem.ai", user.getEmail());
-      assertEquals("System Root User", user.getDisplayName());
-    } finally {
-      // Clean up context
-      context.detach(previousContext);
-    }
-  }
-
-  @Test
-  @Order(6)
-  void getUser_WithInvalidUuid_ShouldReturnNotFound() {
-    // Get the root user ID from the init result
-    UUID rootUserId = initResult.userId();
-    UUID nonExistentUserId = UUID.randomUUID();
-    
-    // Create an authenticated context with admin permissions
-    Set<Permission> permissions = new HashSet<>();
-    permissions.add(Permission.DISPLAY_USER_ANY);
-    MockUser authUser = new MockUser(rootUserId, "root@goodmem.ai", "System Root User", permissions);
-    
-    // Set the authenticated user in the Context
-    Context context = Context.current().withValue(AuthInterceptor.USER_CONTEXT_KEY, authUser);
-    Context previousContext = context.attach();
-    
-    try {
-      // Create a test observer for the response
-      TestStreamObserver<UserOuterClass.User> responseObserver = new TestStreamObserver<>();
-      
-      // Call getUser with invalid UUID
-      ByteString nonExistentIdBytes = Uuids.getBytesFromUUID(nonExistentUserId);
-      userService.getUser(
-          GetUserRequest.newBuilder()
-              .setUserId(nonExistentIdBytes)
-              .build(),
-          responseObserver);
-      
-      // Verify response
-      assertTrue(responseObserver.hasError(), "Should have an error");
-      StatusRuntimeException exception = (StatusRuntimeException) responseObserver.getError();
-      assertEquals(Status.NOT_FOUND.getCode(), exception.getStatus().getCode());
-      assertTrue(exception.getStatus().getDescription().contains("User not found"));
-    } finally {
-      // Clean up context
-      context.detach(previousContext);
-    }
-  }
-
-  @Test
-  @Order(7)
-  void getUser_WithInvalidEmail_ShouldReturnNotFound() {
-    // Get the root user ID from the init result
-    UUID rootUserId = initResult.userId();
-    
-    // Create an authenticated context with admin permissions
-    Set<Permission> permissions = new HashSet<>();
-    permissions.add(Permission.DISPLAY_USER_ANY);
-    MockUser authUser = new MockUser(rootUserId, "root@goodmem.ai", "System Root User", permissions);
-    
-    // Set the authenticated user in the Context
-    Context context = Context.current().withValue(AuthInterceptor.USER_CONTEXT_KEY, authUser);
-    Context previousContext = context.attach();
-    
-    try {
-      // Create a test observer for the response
-      TestStreamObserver<UserOuterClass.User> responseObserver = new TestStreamObserver<>();
-      
-      // Call getUser with invalid email
-      userService.getUser(
-          GetUserRequest.newBuilder()
-              .setEmail("nonexistent@example.com")
-              .build(),
-          responseObserver);
-      
-      // Verify response
-      assertTrue(responseObserver.hasError(), "Should have an error");
-      StatusRuntimeException exception = (StatusRuntimeException) responseObserver.getError();
-      assertEquals(Status.NOT_FOUND.getCode(), exception.getStatus().getCode());
-      assertTrue(exception.getStatus().getDescription().contains("User not found"));
-    } finally {
-      // Clean up context
-      context.detach(previousContext);
-    }
-  }
-
-  /**
-   * Test mock implementation of the User interface for testing.
-   */
-  static class MockUser implements com.goodmem.security.User {
-    private final UUID id;
-    private final String email;
-    private final String displayName;
-    private final Set<Permission> permissions;
-
-    public MockUser(UUID id, String email, String displayName, Set<Permission> permissions) {
-      this.id = id;
-      this.email = email;
-      this.displayName = displayName;
-      this.permissions = permissions;
-    }
-
-    @Override
-    public UUID getId() {
-      return id;
-    }
-
-    @Override
-    public String getEmail() {
-      return email;
-    }
-
-    @Override
-    public String getDisplayName() {
-      return displayName;
-    }
-
-    @Override
-    public Instant getActiveDate() {
-      return Instant.EPOCH;
-    }
-
-    @Override
-    public Instant getInactiveDate() {
-      return Instant.MAX;
-    }
-
-    @Override
-    public Instant getLastLogin() {
-      return Instant.now();
-    }
-
-    @Override
-    public JsonObject getAdditionalAttributes() {
-      return new JsonObject();
-    }
-
-    @Override
-    public boolean isActive(Instant when) {
-      return true;
-    }
-
-    @Override
-    public boolean isActive() {
-      return true;
-    }
-
-    @Override
-    public boolean hasPermission(Permission permission) {
-      return permissions.contains(permission);
-    }
-  }
+  // We no longer need mock classes as we're directly using the real implementations
 
   /**
    * Test implementation of StreamObserver that captures responses and errors.

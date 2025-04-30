@@ -23,7 +23,7 @@
 #   ./run_localhost.sh                 # Start all services
 #   ./run_localhost.sh --exclude-server # Start dependencies only (for IDE development)
 #   ./run_localhost.sh --exclude-ui    # Start without the UI container
-#   ./run_localhost.sh --reinit-db     # Reinitialize the database (destroys all data)
+#   ./run_localhost.sh --reinit-db     # Reinitialize the database only (rebuilds schema and destroys all data)
 #   ./run_localhost.sh --help          # Show help message
 #
 # After changing the config/local_dev.env file, run ./config/update_intellij_config.sh
@@ -73,7 +73,9 @@ if [[ "$SHOW_HELP" == "true" ]]; then
   echo "  --exclude-server   Start dependencies only (DB, MinIO) without the server"
   echo "                     Use this when running the server from IDE/IntelliJ"
   echo "  --exclude-ui       Start without the UI container"
-  echo "  --reinit-db        Reinitialize the database (WARNING: destroys all data)"
+  echo "  --reinit-db        Reinitialize the database only (WARNING: destroys all data)"
+  echo "                     Rebuilds the database image with latest schema changes"
+  echo "                     Does NOT start any services after reinitialization"
   echo "                     Use this after schema changes to recreate the database"
   echo "  --help, -h         Show this help message"
   echo ""
@@ -118,6 +120,9 @@ if [[ "$REINIT_DB" == "true" ]]; then
     echo "Stopping existing containers..."
     docker compose down
     
+    echo "Rebuilding database image to incorporate latest schema changes..."
+    docker compose build db
+    
     echo "Removing database data directory..."
     echo "This may require sudo privileges to remove the PostgreSQL data directory."
     
@@ -135,8 +140,11 @@ if [[ "$REINIT_DB" == "true" ]]; then
     # Create fresh directory with current user ownership
     mkdir -p "${DATA_DIR_BASE}/pgdata"
     
-    echo "Database directory cleared. The database will be recreated on startup."
+    echo "Database directory cleared. The database schema will be recreated on next startup."
     echo ""
+    echo "To start services, run this script again without the --reinit-db flag."
+    echo ""
+    exit 0
   else
     echo "Database reinitialization cancelled."
     echo ""
@@ -165,13 +173,15 @@ else
   echo "Excluding server service (for IDE development)"
 fi
 
-if [[ "$EXCLUDE_UI" == "false" && "$EXCLUDE_SERVER" == "false" ]]; then
+if [[ "$EXCLUDE_UI" == "false" && "$EXCLUDE_SERVER" == "false" && -d "./ui" ]]; then
   SERVICES="$SERVICES ui"
 else
   if [[ "$EXCLUDE_UI" == "true" ]]; then
     echo "Excluding UI service"
   elif [[ "$EXCLUDE_SERVER" == "true" ]]; then
     echo "Excluding UI service (because server is excluded)"
+  elif [[ ! -d "./ui" ]]; then
+    echo "Excluding UI service (UI directory not found)"
   fi
 fi
 
