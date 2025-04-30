@@ -3,8 +3,9 @@ package com.goodmem.db;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.goodmem.common.status.StatusOr;
+import com.goodmem.db.util.PostgresTestHelper;
+import com.goodmem.db.util.PostgresTestHelper.PostgresContext;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
@@ -14,10 +15,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 /**
  * Tests for the database layer.
@@ -27,58 +25,22 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers
 public class DbTest {
 
-  // Use classpath resources for schema files
-  private static final String EXTENSIONS_SQL_PATH = "/db/00-extensions.sql";
-  private static final String SCHEMA_SQL_PATH = "/db/01-schema.sql";
-
-  /**
-   * Use an official PostgreSQL image with pgvector extension.
-   *
-   * <p>The pgvector/pgvector-postgresql Docker image is a community-maintained image that includes
-   * the pgvector extension pre-installed.
-   */
-  @Container
-  private static final PostgreSQLContainer<?> postgres =
-      new PostgreSQLContainer<>(DockerImageName.parse("pgvector/pgvector:pg16"))
-          .withDatabaseName("goodmem")
-          .withUsername("goodmem")
-          .withPassword("goodmem")
-          .withInitScript("db/00-extensions.sql"); // Executes the script from the classpath
-          // We'll add the schema in the setUp method
-
+  private static PostgresContext postgresContext;
   private static Connection connection;
 
   @BeforeAll
   static void setUp() throws SQLException {
-    postgres.start();
-    connection =
-        DriverManager.getConnection(
-            postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
-            
-    // Execute the schema script after the container is started
-    try (var stmt = connection.createStatement()) {
-      // Read schema file from classpath
-      var schemaUrl = DbTest.class.getResource(SCHEMA_SQL_PATH);
-      if (schemaUrl == null) {
-        throw new RuntimeException("Schema file not found: " + SCHEMA_SQL_PATH);
-      }
-      
-      String schema = new String(java.nio.file.Files.readAllBytes(
-          java.nio.file.Path.of(schemaUrl.toURI())));
-          
-      // Execute the schema
-      stmt.execute(schema);
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to initialize database schema", e);
-    }
+    // Setup PostgreSQL container with schema initialization
+    postgresContext = PostgresTestHelper.setupPostgres("goodmem", DbTest.class);
+    connection = postgresContext.getConnection();
   }
 
   @AfterAll
-  static void tearDown() throws SQLException {
-    if (connection != null) {
-      connection.close();
+  static void tearDown() {
+    // Close connection and stop container
+    if (postgresContext != null) {
+      postgresContext.close();
     }
-    postgres.stop();
   }
 
   @BeforeEach

@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.goodmem.common.status.StatusOr;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -16,10 +15,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 /**
  * Tests for the DbUtil class with a real PostgreSQL database using Testcontainers.
@@ -29,24 +25,14 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers
 public class DbUtilTest {
 
-  /**
-   * PostgreSQL container for testing.
-   */
-  @Container
-  private static final PostgreSQLContainer<?> postgres =
-      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16"))
-          .withDatabaseName("goodmem_test")
-          .withUsername("test")
-          .withPassword("test");
-
+  private static PostgresTestHelper.PostgresContext postgresContext;
   private static Connection connection;
 
   @BeforeAll
   static void setUp() throws SQLException {
-    postgres.start();
-    connection =
-        DriverManager.getConnection(
-            postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+    // Use a standard PostgreSQL container (not pgvector) since we don't need vector operations
+    postgresContext = PostgresTestHelper.setupPostgres("goodmem_dbutil_test", DbUtilTest.class);
+    connection = postgresContext.getConnection();
     
     // Set up test tables
     try (Statement stmt = connection.createStatement()) {
@@ -71,9 +57,12 @@ public class DbUtilTest {
       try (Statement stmt = connection.createStatement()) {
         stmt.execute("DROP TABLE IF EXISTS db_util_test");
       }
-      connection.close();
     }
-    postgres.stop();
+    
+    // Close connection and stop container
+    if (postgresContext != null) {
+      postgresContext.close();
+    }
   }
 
   @BeforeEach

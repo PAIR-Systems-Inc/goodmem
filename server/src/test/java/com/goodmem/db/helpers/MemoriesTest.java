@@ -9,8 +9,9 @@ import com.goodmem.db.Space;
 import com.goodmem.db.Spaces;
 import com.goodmem.db.User;
 import com.goodmem.db.Users;
+import com.goodmem.db.util.PostgresTestHelper;
+import com.goodmem.db.util.PostgresTestHelper.PostgresContext;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
@@ -21,11 +22,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
-import org.testcontainers.utility.MountableFile;
 
 /**
  * Tests for the Memories helper class. These tests verify all CRUD operations and edge cases for
@@ -34,35 +31,16 @@ import org.testcontainers.utility.MountableFile;
 @Testcontainers
 public class MemoriesTest {
 
-  // Setup paths to the schema files
-  private static final String PROJECT_ROOT = "/home/amin/clients/wsl_pairsys/goodmem";
-  private static final String EXTENSIONS_SQL_PATH =
-      PROJECT_ROOT + "/database/initdb/00-extensions.sql";
-  private static final String SCHEMA_SQL_PATH = PROJECT_ROOT + "/database/initdb/01-schema.sql";
-
-  @Container
-  private static final PostgreSQLContainer<?> postgres =
-      new PostgreSQLContainer<>(DockerImageName.parse("pgvector/pgvector:pg16"))
-          .withDatabaseName("goodmem_memories_test")
-          .withUsername("goodmem")
-          .withPassword("goodmem")
-          .withCopyFileToContainer(
-              MountableFile.forHostPath(EXTENSIONS_SQL_PATH),
-              "/docker-entrypoint-initdb.d/00-extensions.sql")
-          .withCopyFileToContainer(
-              MountableFile.forHostPath(SCHEMA_SQL_PATH),
-              "/docker-entrypoint-initdb.d/01-schema.sql");
-
+  private static PostgresContext postgresContext;
   private static Connection connection;
   private static UUID testUserId;
   private static UUID testSpaceId;
 
   @BeforeAll
   static void setUp() throws SQLException {
-    postgres.start();
-    connection =
-        DriverManager.getConnection(
-            postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+    // Setup PostgreSQL container with schema initialization
+    postgresContext = PostgresTestHelper.setupPostgres("goodmem_memories_test", MemoriesTest.class);
+    connection = postgresContext.getConnection();
 
     // Setup test user and space that will be reused across tests
     testUserId = createTestUser();
@@ -70,11 +48,11 @@ public class MemoriesTest {
   }
 
   @AfterAll
-  static void tearDown() throws SQLException {
-    if (connection != null) {
-      connection.close();
+  static void tearDown() {
+    // Close connection and stop container
+    if (postgresContext != null) {
+      postgresContext.close();
     }
-    postgres.stop();
   }
 
   @BeforeEach
