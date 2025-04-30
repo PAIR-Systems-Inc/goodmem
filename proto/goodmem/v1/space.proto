@@ -43,7 +43,8 @@ message CreateSpaceRequest {
   map<string, string> labels = 2;
   string embedding_model = 3;
   bool public_read = 4;
-  // owner_id and created_by_id derived from auth context.
+  optional bytes owner_id = 5; // Optional: if not provided, derived from auth context. If provided, requires CREATE_SPACE_ANY permission.
+  // created_by_id always derived from auth context.
 }
 
 message GetSpaceRequest {
