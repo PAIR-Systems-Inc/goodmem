@@ -56,8 +56,12 @@ var createSpaceCmd = &cobra.Command{
 			PublicRead: publicRead,
 		})
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		resp, err := client.CreateSpace(context.Background(), req)
 		if err != nil {
@@ -103,8 +107,12 @@ var listSpacesCmd = &cobra.Command{
 			LabelSelectors: labelsMap,
 		})
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		resp, err := client.ListSpaces(context.Background(), req)
 		if err != nil {
@@ -143,8 +151,12 @@ var deleteSpaceCmd = &cobra.Command{
 			SpaceId: []byte(spaceID),
 		})
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		_, err := client.DeleteSpace(context.Background(), req)
 		if err != nil {
@@ -178,8 +190,12 @@ var getSpaceCmd = &cobra.Command{
 			SpaceId: []byte(spaceID),
 		})
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		resp, err := client.GetSpace(context.Background(), req)
 		if err != nil {
@@ -241,8 +257,12 @@ var updateSpaceCmd = &cobra.Command{
 
 		req := connect.NewRequest(updateReq)
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		resp, err := client.UpdateSpace(context.Background(), req)
 		if err != nil {

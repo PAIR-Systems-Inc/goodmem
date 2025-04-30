@@ -2,22 +2,17 @@ package cmd
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/bufbuild/connect-go"
 	"github.com/pairsys/goodmem/cli/gen/goodmem/v1"
 	"github.com/pairsys/goodmem/cli/gen/goodmem/v1/v1connect"
 	"github.com/spf13/cobra"
-	"golang.org/x/net/http2"
 )
 
 // ConfigFile structure
@@ -209,43 +204,7 @@ func writeConfigFile(path string, config ConfigFile) error {
 	return os.WriteFile(path, data, 0600)
 }
 
-// createHTTPClient creates an HTTP client with proper HTTP/2 configuration
-// This is critical for gRPC operations to work correctly
-func createHTTPClient(insecure bool, serverAddr string) *http.Client {
-    // Plain HTTP? -> use an h2c transport
-    if strings.HasPrefix(serverAddr, "http://") {
-        h2cTransport := &http2.Transport{
-            AllowHTTP: true,
-            DialTLS: func(network, addr string, _ *tls.Config) (net.Conn, error) {
-                return net.Dial(network, addr) // plain TCP, no TLS
-            },
-        }
-        return &http.Client{
-            Timeout:   30 * time.Second,
-            Transport: h2cTransport,
-        }
-    }
-
-    // HTTPS -> regular transport with (optional) insecure TLS
-    tlsCfg := &tls.Config{InsecureSkipVerify: insecure} //nolint:gosec
-    transport := &http.Transport{
-        TLSClientConfig:    tlsCfg,
-        ForceAttemptHTTP2:  true,
-    }
-    if err := http2.ConfigureTransport(transport); err != nil {
-        return &http.Client{
-            Timeout: 30 * time.Second,
-            // Fall back to standard HTTP/1.1 if HTTP/2 configuration fails
-            Transport: transport,
-        }
-    }
-
-    return &http.Client{
-        Timeout:   30 * time.Second,
-        Transport: transport,
-    }
-}
-
+// We're using the createHTTPClient function from root.go
 
 func init() {
 	rootCmd.AddCommand(initCmd)

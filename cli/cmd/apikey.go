@@ -55,8 +55,12 @@ var createApiKeyCmd = &cobra.Command{
 			Labels: labelsMap,
 		})
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		resp, err := client.CreateApiKey(context.Background(), req)
 		if err != nil {
@@ -93,8 +97,12 @@ var listApiKeysCmd = &cobra.Command{
 
 		req := connect.NewRequest(&v1.ListApiKeysRequest{})
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		resp, err := client.ListApiKeys(context.Background(), req)
 		if err != nil {
@@ -159,8 +167,12 @@ var updateApiKeyCmd = &cobra.Command{
 
 		req := connect.NewRequest(updateReq)
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		resp, err := client.UpdateApiKey(context.Background(), req)
 		if err != nil {
@@ -199,8 +211,12 @@ var deleteApiKeyCmd = &cobra.Command{
 			ApiKeyId: []byte(apiKeyID),
 		})
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		_, err := client.DeleteApiKey(context.Background(), req)
 		if err != nil {

@@ -60,8 +60,12 @@ var createMemoryCmd = &cobra.Command{
 			Metadata:           metadataMap,
 		})
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		resp, err := client.CreateMemory(context.Background(), req)
 		if err != nil {
@@ -100,8 +104,12 @@ var getMemoryCmd = &cobra.Command{
 			MemoryId: []byte(memoryID),
 		})
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		resp, err := client.GetMemory(context.Background(), req)
 		if err != nil {
@@ -141,8 +149,12 @@ var listMemoriesCmd = &cobra.Command{
 			SpaceId: []byte(spaceID),
 		})
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		resp, err := client.ListMemories(context.Background(), req)
 		if err != nil {
@@ -181,8 +193,12 @@ var deleteMemoryCmd = &cobra.Command{
 			MemoryId: []byte(memoryID),
 		})
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		_, err := client.DeleteMemory(context.Background(), req)
 		if err != nil {

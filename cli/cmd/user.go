@@ -11,8 +11,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// nolint:unused
-var userID string
+// Variables for the user command flags
+var (
+	userEmail string
+)
 
 // userCmd represents the user command
 var userCmd = &cobra.Command{
@@ -25,11 +27,12 @@ var userCmd = &cobra.Command{
 var getUserCmd = &cobra.Command{
 	Use:   "get [user-id]",
 	Short: "Get user details",
-	Long:  `Get details for a specific user by their ID.`,
-	Args:  cobra.ExactArgs(1),
+	Long: `Get details for a user in the GoodMem system.
+
+If called with no arguments, retrieves the current user (based on API key).
+Can be called with either a user ID or email address to look up a specific user.`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		userID := args[0]
-		
 		// Create HTTP client with proper HTTP/2 configuration for gRPC
 		httpClient := createHTTPClient(true, serverAddress)
 		
@@ -39,12 +42,29 @@ var getUserCmd = &cobra.Command{
 			connect.WithGRPC(),
 		)
 
-		req := connect.NewRequest(&v1.GetUserRequest{
-			UserId: []byte(userID),
-		})
+		// Initialize the request
+		request := &v1.GetUserRequest{}
+		
+		// Set the request parameters based on what was provided
+		if len(args) > 0 {
+			// User ID was provided as positional argument
+			request.UserId = []byte(args[0])
+		} else if userEmail != "" {
+			// Email was provided as a flag - need to convert to pointer
+			email := userEmail // Create a local copy
+			request.Email = &email
+		}
+		// If neither provided, request will be empty which will return the current user
 
-		// Add API key header
-		req.Header().Set("x-api-key", "test-key")
+		// Create the request
+		req := connect.NewRequest(request)
+
+		// Add API key header from global config
+		if apiKey != "" {
+			req.Header().Set("x-api-key", apiKey)
+		} else {
+			return fmt.Errorf("API key is required. Set it using the --api-key flag or GOODMEM_API_KEY environment variable")
+		}
 
 		resp, err := client.GetUser(context.Background(), req)
 		if err != nil {
@@ -64,4 +84,7 @@ var getUserCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(userCmd)
 	userCmd.AddCommand(getUserCmd)
+	
+	// Add email flag to the get command
+	getUserCmd.Flags().StringVar(&userEmail, "email", "", "Email address of the user to look up")
 }
