@@ -63,12 +63,88 @@
   - Extend the generated `*ImplBase` class (e.g., `SpaceServiceImplBase`)
   - Implement all methods defined in the service with the StreamObserver pattern
   - Return dummy data in implementation stubs until database integration
+  - Use Java records for configuration objects (immutable configuration)
+- **Authentication Flow Pattern**:
+  - Every service method first retrieves the authenticated user from the context
+  - Use `com.goodmem.security.User authenticatedUser = AuthInterceptor.USER_CONTEXT_KEY.get();`
+  - Check authentication before any other operations
+  - Return early with UNAUTHENTICATED error if no authentication context exists
+  - Example pattern:
+    ```java
+    com.goodmem.security.User authenticatedUser = AuthInterceptor.USER_CONTEXT_KEY.get();
+    if (authenticatedUser == null) {
+      Logger.error("No authentication context found");
+      responseObserver.onError(
+          io.grpc.Status.UNAUTHENTICATED
+              .withDescription("Authentication required")
+              .asRuntimeException());
+      return;
+    }
+    ```
+- **Permission Check Pattern**:
+  - Check permissions immediately after authentication validation
+  - Distinguish between broad permissions (ANY) vs limited permissions (OWN)
+  - Implement special handling when user only has limited permissions
+  - All permission validation must happen before any database operations
+  - Example pattern:
+    ```java
+    boolean hasAnyPermission = authenticatedUser.hasPermission(Permission.DISPLAY_RESOURCE_ANY);
+    boolean hasOwnPermission = authenticatedUser.hasPermission(Permission.DISPLAY_RESOURCE_OWN);
+    
+    if (!hasAnyPermission && !hasOwnPermission) {
+      Logger.error("User lacks necessary permissions for this operation");
+      responseObserver.onError(
+          io.grpc.Status.PERMISSION_DENIED
+              .withDescription("Permission denied")
+              .asRuntimeException());
+      return;
+    }
+    ```
+- **Fallback to Authenticated User**:
+  - When no explicit parameters are provided, service should default to using the authenticated user's data
+  - This pattern applies for both broad and limited permission sets
+  - Example:
+    ```java
+    // If neither field is provided, default to the authenticated user
+    if (!userIdProvided && !emailProvided) {
+      requestedUserId = authenticatedUser.getId();
+    }
+    ```
+- **Parameter Validation with Contextual Logic**:
+  - Implement parameter validation based on permission context
+  - For limited permissions (OWN), validate parameters match the authenticated user
+  - For broad permissions (ANY), handle multiple parameters with clear priority
+  - Log warnings when ignoring parameters (e.g., when both user_id and email are provided)
+- **Multi-criteria Lookup Pattern**:
+  - Implement clear priority and fallback logic for multiple lookup parameters
+  - Document the complete lookup behavior in method comments
+  - Follow consistent patterns for handling multiple parameters across all services
 - **REST to gRPC Bridging**:
   - Create a blocking stub for each service in `Main.java`
   - Use in-process channels for efficiency: `InProcessChannelBuilder.forName("in-process").build()`
   - Follow consistent naming pattern for handler methods: `handle<Service><Method>`
   - Convert JSON request bodies to protocol buffer requests using appropriate builders
   - Convert protocol buffer responses to JSON using utility methods
+- **Database Operation Pattern**:
+  - Use try-with-resources for connection handling
+  - Use StatusOr pattern for error handling and database operation results
+  - Implement conditional database operations based on available parameters
+  - Example pattern:
+    ```java
+    try (Connection connection = config.dataSource().getConnection()) {
+      StatusOr<Optional<User>> userOr;
+      
+      if (requestedUserId != null) {
+        userOr = com.goodmem.db.Users.loadById(connection, requestedUserId);
+      } else if (requestedEmail != null) {
+        userOr = com.goodmem.db.Users.loadByEmail(connection, requestedEmail);
+      } else {
+        // Handle error case
+      }
+      
+      // Process the result
+    }
+    ```
 - **Error Handling**:
   - Use detailed error logging internally, but return generic error messages to clients
   - Log specific error details with `Logger.error()` including exception information
