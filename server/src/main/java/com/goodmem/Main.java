@@ -35,7 +35,7 @@ import goodmem.v1.SpaceOuterClass.GetSpaceRequest;
 import goodmem.v1.SpaceOuterClass.ListSpacesRequest;
 import goodmem.v1.SpaceOuterClass.ListSpacesResponse;
 import goodmem.v1.SpaceOuterClass.Space;
-import goodmem.v1.SpaceOuterClass.StringMap;
+import goodmem.v1.Common.StringMap;
 import goodmem.v1.SpaceOuterClass.UpdateSpaceRequest;
 import goodmem.v1.SpaceServiceGrpc;
 import goodmem.v1.UserOuterClass.GetUserRequest;
