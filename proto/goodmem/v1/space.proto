@@ -5,6 +5,7 @@ option go_package = "github.com/pairsys/goodmem/cli/gen/goodmem/v1";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
+import "goodmem/v1/common.proto";
 
 // A Space is the fundamental storage unit in GoodMem.
 // Reserved label keys:
@@ -53,22 +54,38 @@ message GetSpaceRequest {
 
 message ListSpacesRequest {
   // Optional filters
-  bytes owner_id = 1; // Filter by owner (16 bytes UUID) (if admin or for user's own spaces)
+  optional bytes owner_id = 1;                         // Filter by owner (UUID)
   // label_selectors is a partial match: all listed pairs must be present
   // in a Space's labels map for it to be returned.
-  map<string, string> label_selectors = 2; // Partial match on labels
-  // Add pagination fields if needed (page_size, page_token)
+  map<string, string> label_selectors = 2;    // Partial match on labels
+  optional string name_filter = 3;                     // Glob-style match on space name
+
+  // Pagination
+  optional int32 max_results = 4;                      // Max results to return
+  optional string next_token = 5;                      // Opaque token for the next page
+
+  // Sorting
+  optional string sort_by = 6;                         // e.g., "created_time", "name"
+  optional SortOrder sort_order = 7;                   // ASCENDING or DESCENDING
 }
 
 message ListSpacesResponse {
-  repeated Space spaces = 1;
-  // Add next_page_token if using pagination
+  repeated Space spaces = 1;                 // Page of results
+  string next_token = 2;                     // Token for next page (or empty)
 }
 
-// Define a wrapper message for the map
-message StringMap {
-  map<string, string> labels = 1;
+// Internal serialization of this message produces the next_token
+message ListSpacesNextPageToken {
+  int32 start = 10;                                    // Cursor position
+  optional bytes owner_id = 20;
+  map<string, string> label_selectors = 30;
+  optional string name_filter = 40;
+  optional bytes requestor_id = 50;                     // Authenticated user for validation
+  optional string sort_by = 60;
+  optional SortOrder sort_order = 70;
 }
+
+// SortOrder and StringMap have been moved to common.proto
 
 message UpdateSpaceRequest {
   bytes space_id = 1; // Required: ID of the space to update (16 bytes UUID)
