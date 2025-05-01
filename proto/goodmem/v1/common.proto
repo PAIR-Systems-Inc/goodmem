@@ -1,0 +1,17 @@
+syntax = "proto3";
+package goodmem.v1;
+
+option go_package = "github.com/pairsys/goodmem/cli/gen/goodmem/v1";
+
+// Common sort order enum used across API endpoints that support sorting
+enum SortOrder {
+  SORT_ORDER_UNSPECIFIED = 0;
+  ASCENDING = 1;
+  DESCENDING = 2;
+}
+
+// A wrapper message for string-to-string maps
+// Used to wrap maps when they need to be placed in a oneof field
+message StringMap {
+  map<string, string> labels = 1;
+}
