@@ -49,5 +49,11 @@ public enum Permission {
   DELETE_SPACE_OWN,
   
   /** Permission for a user to delete any space in the system. */
-  DELETE_SPACE_ANY;
+  DELETE_SPACE_ANY,
+  
+  /** Permission for a user to list their own spaces. */
+  LIST_SPACE_OWN,
+  
+  /** Permission for a user to list any spaces in the system. */
+  LIST_SPACE_ANY;
 }
