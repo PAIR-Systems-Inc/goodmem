@@ -17,6 +17,8 @@ import goodmem.v1.SpaceOuterClass.CreateSpaceRequest;
 import goodmem.v1.SpaceOuterClass.DeleteSpaceRequest;
 import goodmem.v1.SpaceOuterClass.GetSpaceRequest;
 import goodmem.v1.SpaceOuterClass.Space;
+import goodmem.v1.SpaceOuterClass.StringMap;
+import goodmem.v1.SpaceOuterClass.UpdateSpaceRequest;
 import goodmem.v1.UserOuterClass;
 import goodmem.v1.UserOuterClass.InitializeSystemRequest;
 import goodmem.v1.UserOuterClass.InitializeSystemResponse;
@@ -94,13 +96,11 @@ public class SpaceServiceImplTest {
     }
   }
 
-  @Test
-  void testSpaceServiceOperations() throws SQLException {
-    // =========================================================================
-    // Step 1: Initialize the system and authenticate as root user
-    // =========================================================================
-    System.out.println("Step 1: Initialize the system");
-    
+  /**
+   * Test root user and authentication setup that can be reused across tests.
+   */
+  private com.goodmem.security.User setupRootUser() throws SQLException {
+    // Initialize the system and authenticate as root user
     TestStreamObserver<InitializeSystemResponse> initObserver = new TestStreamObserver<>();
     userService.initializeSystem(InitializeSystemRequest.newBuilder().build(), initObserver);
     
@@ -110,8 +110,6 @@ public class SpaceServiceImplTest {
     assertTrue(initObserver.hasValue(), "Should have initialization response");
     
     InitializeSystemResponse initResponse = initObserver.getValue();
-    assertFalse(initResponse.getAlreadyInitialized(), "System should not already be initialized");
-    assertEquals("System initialized successfully", initResponse.getMessage());
     
     // Extract and store the root API key and user ID for subsequent tests
     String rootApiKey = initResponse.getRootApiKey();
@@ -121,8 +119,18 @@ public class SpaceServiceImplTest {
     System.out.println("Root API Key: " + rootApiKey);
     System.out.println("Root User ID: " + rootUserId);
     
-    // Authenticate as the root user for subsequent tests
-    com.goodmem.security.User rootUser = authenticateUser(rootApiKey, rootUserId, Roles.ROOT.role());
+    // Authenticate as the root user and return the user object
+    return authenticateUser(rootApiKey, rootUserId, Roles.ROOT.role());
+  }
+  
+  @Test
+  void testSpaceServiceOperations() throws SQLException {
+    // =========================================================================
+    // Step 1: Initialize the system and authenticate as root user
+    // =========================================================================
+    System.out.println("Step 1: Initialize the system");
+    
+    com.goodmem.security.User rootUser = setupRootUser();
     
     // =========================================================================
     // Step 2: Create a space with the authenticated user as owner
@@ -408,6 +416,201 @@ public class SpaceServiceImplTest {
       
     } finally {
       previousContext.attach(); // Restore original context
+    }
+  }
+  
+  /**
+   * Tests the updateSpace method with various scenarios including label replacement,
+   * label merging, and validation of error conditions.
+   */
+  @Test
+  void testUpdateSpace() throws SQLException {
+    // Set up the root user for authentication
+    com.goodmem.security.User rootUser = setupRootUser();
+    
+    // Set up authentication context
+    Context authenticatedContext = Context.current().withValue(AuthInterceptor.USER_CONTEXT_KEY, rootUser);
+    Context previousContext = authenticatedContext.attach();
+    
+    try {
+      // Create a space for update testing
+      TestStreamObserver<Space> createSpaceObserver = new TestStreamObserver<>();
+      CreateSpaceRequest createSpaceRequest = CreateSpaceRequest.newBuilder()
+          .setName("Space To Update")
+          .putLabels("purpose", "update-test")
+          .putLabels("environment", "test")
+          .putLabels("version", "1.0")
+          .setPublicRead(false)
+          .build();
+      
+      spaceService.createSpace(createSpaceRequest, createSpaceObserver);
+      
+      // Verify space was created successfully
+      assertFalse(createSpaceObserver.hasError(), 
+          "Create space for update test should not error: " + 
+          (createSpaceObserver.hasError() ? createSpaceObserver.getError().getMessage() : ""));
+      
+      Space spaceToUpdate = createSpaceObserver.getValue();
+      UUID spaceToUpdateId = com.goodmem.db.util.UuidUtil.fromProtoBytes(spaceToUpdate.getSpaceId()).getValue();
+      
+      System.out.println("Created space for update test, ID: " + spaceToUpdateId);
+      
+      // Test 1: Update name and public_read flag
+      TestStreamObserver<Space> updateBasicObserver = new TestStreamObserver<>();
+      UpdateSpaceRequest updateBasicRequest = UpdateSpaceRequest.newBuilder()
+          .setSpaceId(com.goodmem.db.util.UuidUtil.toProtoBytes(spaceToUpdateId))
+          .setName("Updated Space Name")
+          .setPublicRead(true)
+          .build();
+      
+      spaceService.updateSpace(updateBasicRequest, updateBasicObserver);
+      
+      // Verify basic update was successful
+      assertFalse(updateBasicObserver.hasError(),
+          "Basic space update should not error: " + 
+          (updateBasicObserver.hasError() ? updateBasicObserver.getError().getMessage() : ""));
+      
+      Space basicUpdatedSpace = updateBasicObserver.getValue();
+      assertEquals("Updated Space Name", basicUpdatedSpace.getName(), 
+          "Space name should be updated");
+      assertTrue(basicUpdatedSpace.getPublicRead(), 
+          "Public read flag should be updated to true");
+      
+      // Verify labels are preserved when not specified in update
+      assertEquals(spaceToUpdate.getLabelsMap().size(), basicUpdatedSpace.getLabelsMap().size(),
+          "Labels should be preserved when not specified in update");
+      assertEquals(spaceToUpdate.getLabelsMap().get("purpose"), basicUpdatedSpace.getLabelsMap().get("purpose"),
+          "Original labels should be preserved");
+      
+      // Test 2: Update with replace_labels
+      TestStreamObserver<Space> replaceLabelsObserver = new TestStreamObserver<>();
+      
+      // Create StringMap for replace_labels
+      StringMap.Builder replaceLabelMapBuilder = StringMap.newBuilder();
+      replaceLabelMapBuilder.putLabels("new-label", "new-value");
+      replaceLabelMapBuilder.putLabels("another-label", "another-value");
+      
+      UpdateSpaceRequest replaceLabelsRequest = UpdateSpaceRequest.newBuilder()
+          .setSpaceId(com.goodmem.db.util.UuidUtil.toProtoBytes(spaceToUpdateId))
+          .setReplaceLabels(replaceLabelMapBuilder.build())
+          .build();
+      
+      spaceService.updateSpace(replaceLabelsRequest, replaceLabelsObserver);
+      
+      // Verify replace_labels update was successful
+      assertFalse(replaceLabelsObserver.hasError(),
+          "Replace labels update should not error: " + 
+          (replaceLabelsObserver.hasError() ? replaceLabelsObserver.getError().getMessage() : ""));
+      
+      Space replaceLabelsSpace = replaceLabelsObserver.getValue();
+      assertEquals(2, replaceLabelsSpace.getLabelsMap().size(),
+          "Should have exactly 2 labels after replacement");
+      assertEquals("new-value", replaceLabelsSpace.getLabelsMap().get("new-label"),
+          "Should have new label after replacement");
+      assertFalse(replaceLabelsSpace.getLabelsMap().containsKey("purpose"),
+          "Original labels should be removed after replacement");
+      
+      // Test 3: Update with merge_labels
+      TestStreamObserver<Space> mergeLabelsObserver = new TestStreamObserver<>();
+      
+      // Create StringMap for merge_labels
+      StringMap.Builder mergeLabelMapBuilder = StringMap.newBuilder();
+      mergeLabelMapBuilder.putLabels("merged-label", "merged-value");
+      mergeLabelMapBuilder.putLabels("new-label", "updated-value"); // Should update existing label
+      
+      UpdateSpaceRequest mergeLabelsRequest = UpdateSpaceRequest.newBuilder()
+          .setSpaceId(com.goodmem.db.util.UuidUtil.toProtoBytes(spaceToUpdateId))
+          .setMergeLabels(mergeLabelMapBuilder.build())
+          .build();
+      
+      spaceService.updateSpace(mergeLabelsRequest, mergeLabelsObserver);
+      
+      // Verify merge_labels update was successful
+      assertFalse(mergeLabelsObserver.hasError(),
+          "Merge labels update should not error: " + 
+          (mergeLabelsObserver.hasError() ? mergeLabelsObserver.getError().getMessage() : ""));
+      
+      Space mergeLabelsSpace = mergeLabelsObserver.getValue();
+      assertEquals(3, mergeLabelsSpace.getLabelsMap().size(),
+          "Should have 3 labels after merging");
+      assertEquals("merged-value", mergeLabelsSpace.getLabelsMap().get("merged-label"),
+          "Should have new merged label");
+      assertEquals("updated-value", mergeLabelsSpace.getLabelsMap().get("new-label"),
+          "Existing label should be updated with new value from merge");
+      assertEquals("another-value", mergeLabelsSpace.getLabelsMap().get("another-label"),
+          "Existing label not in merge request should be preserved");
+      
+      // Test 4: Error case - attempt to provide both replace_labels and merge_labels
+      // Note: With oneof, this isn't actually possible in a well-formed protobuf message,
+      // as setting one field in a oneof automatically clears any other fields in the same oneof.
+      // However, our test suite can attempt this pattern to verify server behavior matches expectations.
+      TestStreamObserver<Space> invalidLabelsObserver = new TestStreamObserver<>();
+      
+      // Create StringMap builders for both types of labels
+      StringMap.Builder replaceLabelBuilder = StringMap.newBuilder();
+      replaceLabelBuilder.putLabels("replace", "value");
+      
+      StringMap.Builder mergeLabelBuilder = StringMap.newBuilder();
+      mergeLabelBuilder.putLabels("merge", "value");
+      
+      // We'll set replace_labels first, then merge_labels - the latter should override
+      UpdateSpaceRequest.Builder requestBuilder = UpdateSpaceRequest.newBuilder()
+          .setSpaceId(com.goodmem.db.util.UuidUtil.toProtoBytes(spaceToUpdateId))
+          .setReplaceLabels(replaceLabelBuilder.build());
+      
+      // Try to verify behavior by explicitly checking case in our test
+      requestBuilder.setMergeLabels(mergeLabelBuilder.build());
+      UpdateSpaceRequest invalidLabelsRequest = requestBuilder.build();
+      
+      // Verify that the oneof is set to merge_labels (last one set)
+      assertEquals(UpdateSpaceRequest.LabelUpdateStrategyCase.MERGE_LABELS, 
+          invalidLabelsRequest.getLabelUpdateStrategyCase(),
+          "Only the last label strategy set should be active due to oneof semantics");
+      
+      spaceService.updateSpace(invalidLabelsRequest, invalidLabelsObserver);
+      
+      // We don't expect an error now because oneof ensures only one field is set
+      assertFalse(invalidLabelsObserver.hasError(),
+          "Update with oneof should succeed as only the last field set (merge_labels) is active");
+      
+      // The operation should have succeeded with the merge_labels field
+      Space resultSpace = invalidLabelsObserver.getValue();
+      assertTrue(resultSpace.getLabelsMap().containsKey("merge"),
+          "The merge field should be present in the result");
+          
+      // Test 5: Error case - attempt to update name to one that already exists
+      
+      // First create another space with a unique name
+      TestStreamObserver<Space> secondSpaceObserver = new TestStreamObserver<>();
+      CreateSpaceRequest secondSpaceRequest = CreateSpaceRequest.newBuilder()
+          .setName("Second Space")
+          .putLabels("purpose", "duplicate-test")
+          .build();
+      
+      spaceService.createSpace(secondSpaceRequest, secondSpaceObserver);
+      assertFalse(secondSpaceObserver.hasError(), "Creating second space should not error");
+      
+      // Now try to update our test space to have the same name as the second space
+      TestStreamObserver<Space> duplicateNameObserver = new TestStreamObserver<>();
+      UpdateSpaceRequest duplicateNameRequest = UpdateSpaceRequest.newBuilder()
+          .setSpaceId(com.goodmem.db.util.UuidUtil.toProtoBytes(spaceToUpdateId))
+          .setName("Second Space")
+          .build();
+      
+      spaceService.updateSpace(duplicateNameRequest, duplicateNameObserver);
+      
+      // Verify the update with duplicate name fails
+      assertTrue(duplicateNameObserver.hasError(),
+          "Update with duplicate name should fail");
+      
+      StatusRuntimeException nameException = (StatusRuntimeException) duplicateNameObserver.getError();
+      assertEquals(Status.ALREADY_EXISTS.getCode(), nameException.getStatus().getCode(),
+          "Error code should be ALREADY_EXISTS");
+      assertTrue(nameException.getStatus().getDescription().contains("already exists"),
+          "Error should mention name already exists");
+    } finally {
+      // Restore original context
+      previousContext.attach();
     }
   }
   

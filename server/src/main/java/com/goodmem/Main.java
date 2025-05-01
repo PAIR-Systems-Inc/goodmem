@@ -35,6 +35,7 @@ import goodmem.v1.SpaceOuterClass.GetSpaceRequest;
 import goodmem.v1.SpaceOuterClass.ListSpacesRequest;
 import goodmem.v1.SpaceOuterClass.ListSpacesResponse;
 import goodmem.v1.SpaceOuterClass.Space;
+import goodmem.v1.SpaceOuterClass.StringMap;
 import goodmem.v1.SpaceOuterClass.UpdateSpaceRequest;
 import goodmem.v1.SpaceServiceGrpc;
 import goodmem.v1.UserOuterClass.GetUserRequest;
@@ -325,10 +326,29 @@ public class Main {
       requestBuilder.setPublicRead((Boolean) json.get("public_read"));
     }
 
+    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> replaceLabels = (Map<String, String>) json.get("replace_labels");
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(replaceLabels);
+      requestBuilder.setReplaceLabels(labelsBuilder.build());
+    }
+    
+    if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> mergeLabels = (Map<String, String>) json.get("merge_labels");
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(mergeLabels);
+      requestBuilder.setMergeLabels(labelsBuilder.build());
+    }
+    
+    // Legacy support for "labels" field - treat as replace_labels
     if (json.containsKey("labels") && json.get("labels") instanceof Map) {
       @SuppressWarnings("unchecked")
       Map<String, String> labels = (Map<String, String>) json.get("labels");
-      requestBuilder.putAllLabels(labels);
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(labels);
+      requestBuilder.setReplaceLabels(labelsBuilder.build());
     }
 
     Space response = spaceService.createSpace(requestBuilder.build());
@@ -421,10 +441,29 @@ public class Main {
       requestBuilder.setPublicRead((Boolean) json.get("public_read"));
     }
 
+    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> replaceLabels = (Map<String, String>) json.get("replace_labels");
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(replaceLabels);
+      requestBuilder.setReplaceLabels(labelsBuilder.build());
+    }
+    
+    if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> mergeLabels = (Map<String, String>) json.get("merge_labels");
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(mergeLabels);
+      requestBuilder.setMergeLabels(labelsBuilder.build());
+    }
+    
+    // Legacy support for "labels" field - treat as replace_labels
     if (json.containsKey("labels") && json.get("labels") instanceof Map) {
       @SuppressWarnings("unchecked")
       Map<String, String> labels = (Map<String, String>) json.get("labels");
-      requestBuilder.putAllLabels(labels);
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(labels);
+      requestBuilder.setReplaceLabels(labelsBuilder.build());
     }
 
     Space response = spaceService.updateSpace(requestBuilder.build());
@@ -601,10 +640,29 @@ public class Main {
     CreateApiKeyRequest.Builder requestBuilder = CreateApiKeyRequest.newBuilder();
     Map<String, Object> json = ctx.bodyAsClass(Map.class);
 
+    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> replaceLabels = (Map<String, String>) json.get("replace_labels");
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(replaceLabels);
+      requestBuilder.setReplaceLabels(labelsBuilder.build());
+    }
+    
+    if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> mergeLabels = (Map<String, String>) json.get("merge_labels");
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(mergeLabels);
+      requestBuilder.setMergeLabels(labelsBuilder.build());
+    }
+    
+    // Legacy support for "labels" field - treat as replace_labels
     if (json.containsKey("labels") && json.get("labels") instanceof Map) {
       @SuppressWarnings("unchecked")
       Map<String, String> labels = (Map<String, String>) json.get("labels");
-      requestBuilder.putAllLabels(labels);
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(labels);
+      requestBuilder.setReplaceLabels(labelsBuilder.build());
     }
 
     // Note: handling expires_at would require timestamp parsing which is omitted for brevity
@@ -655,10 +713,29 @@ public class Main {
 
     Map<String, Object> json = ctx.bodyAsClass(Map.class);
 
+    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> replaceLabels = (Map<String, String>) json.get("replace_labels");
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(replaceLabels);
+      requestBuilder.setReplaceLabels(labelsBuilder.build());
+    }
+    
+    if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> mergeLabels = (Map<String, String>) json.get("merge_labels");
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(mergeLabels);
+      requestBuilder.setMergeLabels(labelsBuilder.build());
+    }
+    
+    // Legacy support for "labels" field - treat as replace_labels
     if (json.containsKey("labels") && json.get("labels") instanceof Map) {
       @SuppressWarnings("unchecked")
       Map<String, String> labels = (Map<String, String>) json.get("labels");
-      requestBuilder.putAllLabels(labels);
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(labels);
+      requestBuilder.setReplaceLabels(labelsBuilder.build());
     }
 
     if (json.containsKey("status")) {
