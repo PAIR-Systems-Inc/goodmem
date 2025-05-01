@@ -74,6 +74,8 @@ CREATE INDEX idx_space_labels ON space USING GIN (labels);
 CREATE INDEX idx_space_public_read ON space (public_read);
 CREATE INDEX idx_space_created_by_id ON space (created_by_id);
 CREATE INDEX idx_space_updated_by_id ON space (updated_by_id);
+-- Add trigram index for name pattern matching with LIKE/ILIKE
+CREATE INDEX idx_space_name_trgm ON space USING GIN (name gin_trgm_ops);
 
 -- Table for Memories (Parent entity for chunks)
 CREATE TABLE memory (

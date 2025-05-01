@@ -4,3 +4,4 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp"; -- For uuid_generate_v4()
 CREATE EXTENSION IF NOT EXISTS vector;    -- For vector type and indexing
 CREATE EXTENSION IF NOT EXISTS pgcrypto;  -- For additional cryptographic functions
+CREATE EXTENSION IF NOT EXISTS pg_trgm;   -- For trigram-based text search and indexing
