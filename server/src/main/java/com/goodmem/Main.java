@@ -103,7 +103,7 @@ public class Main {
 
     // Create service configs
     var userServiceConfig = new UserServiceImpl.Config(dataSource);
-    
+
     // Create service implementations with connection pool
     this.spaceServiceImpl = new SpaceServiceImpl(
         new SpaceServiceImpl.Config(dataSource, "openai-ada-002"));
@@ -166,7 +166,7 @@ public class Main {
   /**
    * Sets up and configures the HikariCP connection pool with database properties
    * from system properties.
-   * 
+   *
    * @return A configured HikariDataSource for database connections
    */
   private HikariDataSource setupDataSource() {
@@ -174,7 +174,7 @@ public class Main {
     String dbUrl = System.getenv("DB_URL");
     String dbUser = System.getenv("DB_USER");
     String dbPassword = System.getenv("DB_PASSWORD");
-    
+
     // Configure HikariCP
     HikariConfig config = new HikariConfig();
     config.setJdbcUrl(dbUrl);
@@ -219,7 +219,7 @@ public class Main {
         .clientAuth(ClientAuth.NONE) // Don't require client certificates
         .keyManager(serverCrtBs.openBufferedStream(), serverKeyBs.openBufferedStream())
         .build();
-        
+
     // Log certificate information
     Logger.info(
         "TLS enabled for gRPC server with: Certificate {}, Private key {}",
@@ -227,7 +227,7 @@ public class Main {
 
     // Create a shared AuthInterceptor instance
     var authInterceptor = new AuthInterceptor(dataSource);
-    
+
     grpcServer =
         Grpc.newServerBuilderForPort(GRPC_PORT, credentials)
             .addService(ServerInterceptors.intercept(spaceServiceImpl, authInterceptor))
@@ -262,7 +262,7 @@ public class Main {
       grpcServer.shutdown().awaitTermination(30, TimeUnit.SECONDS);
     }
   }
-  
+
   private void shutdown() {
     // Shut down HikariCP connection pool
     if (dataSource != null && !dataSource.isClosed()) {
@@ -326,29 +326,25 @@ public class Main {
       requestBuilder.setPublicRead((Boolean) json.get("public_read"));
     }
 
-    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> replaceLabels = (Map<String, String>) json.get("replace_labels");
-      StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(replaceLabels);
-      requestBuilder.setReplaceLabels(labelsBuilder.build());
-    }
-    
-    if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> mergeLabels = (Map<String, String>) json.get("merge_labels");
-      StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(mergeLabels);
-      requestBuilder.setMergeLabels(labelsBuilder.build());
-    }
-    
-    // Legacy support for "labels" field - treat as replace_labels
+    // CreateSpaceRequest uses direct map rather than StringMap wrapper
     if (json.containsKey("labels") && json.get("labels") instanceof Map) {
       @SuppressWarnings("unchecked")
       Map<String, String> labels = (Map<String, String>) json.get("labels");
-      StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(labels);
-      requestBuilder.setReplaceLabels(labelsBuilder.build());
+      requestBuilder.putAllLabels(labels);
+    }
+
+    // Support for replace_labels/merge_labels fields from clients using the new pattern
+    // Both get treated the same for CreateSpaceRequest since it only has one labels field
+    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> replaceLabels = (Map<String, String>) json.get("replace_labels");
+      requestBuilder.putAllLabels(replaceLabels);
+    }
+
+    if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> mergeLabels = (Map<String, String>) json.get("merge_labels");
+      requestBuilder.putAllLabels(mergeLabels);
     }
 
     Space response = spaceService.createSpace(requestBuilder.build());
@@ -414,7 +410,7 @@ public class Main {
    * Handles a REST request to update a Space by ID.
    * Converts the hex UUID to binary format, builds the update request from JSON,
    * and calls the gRPC service.
-   * 
+   *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleUpdateSpace(Context ctx) {
@@ -448,7 +444,7 @@ public class Main {
       labelsBuilder.putAllLabels(replaceLabels);
       requestBuilder.setReplaceLabels(labelsBuilder.build());
     }
-    
+
     if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
       @SuppressWarnings("unchecked")
       Map<String, String> mergeLabels = (Map<String, String>) json.get("merge_labels");
@@ -456,7 +452,7 @@ public class Main {
       labelsBuilder.putAllLabels(mergeLabels);
       requestBuilder.setMergeLabels(labelsBuilder.build());
     }
-    
+
     // Legacy support for "labels" field - treat as replace_labels
     if (json.containsKey("labels") && json.get("labels") instanceof Map) {
       @SuppressWarnings("unchecked")
@@ -473,7 +469,7 @@ public class Main {
   /**
    * Handles a REST request to delete a Space by ID.
    * Converts the hex UUID to binary format and calls the gRPC service.
-   * 
+   *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleDeleteSpace(Context ctx) {
@@ -516,7 +512,7 @@ public class Main {
   /**
    * Handles a REST request to create a new Memory.
    * Builds the create request from JSON and calls the gRPC service.
-   * 
+   *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleCreateMemory(Context ctx) {
@@ -557,7 +553,7 @@ public class Main {
   /**
    * Handles a REST request to retrieve a Memory by ID.
    * Converts the hex UUID to binary format and calls the gRPC service.
-   * 
+   *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleGetMemory(Context ctx) {
@@ -581,7 +577,7 @@ public class Main {
   /**
    * Handles a REST request to list Memories within a Space.
    * Converts the space hex UUID to binary format and calls the gRPC service.
-   * 
+   *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleListMemories(Context ctx) {
@@ -605,7 +601,7 @@ public class Main {
   /**
    * Handles a REST request to delete a Memory by ID.
    * Converts the hex UUID to binary format and calls the gRPC service.
-   * 
+   *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleDeleteMemory(Context ctx) {
@@ -630,7 +626,7 @@ public class Main {
   /**
    * Handles a REST request to create a new API Key.
    * Builds the create request from JSON and calls the gRPC service.
-   * 
+   *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleCreateApiKey(Context ctx) {
@@ -640,29 +636,11 @@ public class Main {
     CreateApiKeyRequest.Builder requestBuilder = CreateApiKeyRequest.newBuilder();
     Map<String, Object> json = ctx.bodyAsClass(Map.class);
 
-    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> replaceLabels = (Map<String, String>) json.get("replace_labels");
-      StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(replaceLabels);
-      requestBuilder.setReplaceLabels(labelsBuilder.build());
-    }
-    
-    if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> mergeLabels = (Map<String, String>) json.get("merge_labels");
-      StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(mergeLabels);
-      requestBuilder.setMergeLabels(labelsBuilder.build());
-    }
-    
-    // Legacy support for "labels" field - treat as replace_labels
+    // ApiKey uses direct map rather than StringMap wrapper
     if (json.containsKey("labels") && json.get("labels") instanceof Map) {
       @SuppressWarnings("unchecked")
       Map<String, String> labels = (Map<String, String>) json.get("labels");
-      StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(labels);
-      requestBuilder.setReplaceLabels(labelsBuilder.build());
+      requestBuilder.putAllLabels(labels);
     }
 
     // Note: handling expires_at would require timestamp parsing which is omitted for brevity
@@ -677,7 +655,7 @@ public class Main {
   /**
    * Handles a REST request to list API Keys for the current user.
    * Calls the gRPC service to get the list of keys.
-   * 
+   *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleListApiKeys(Context ctx) {
@@ -694,7 +672,7 @@ public class Main {
    * Handles a REST request to update an API Key by ID.
    * Converts the hex UUID to binary format, builds the update request from JSON,
    * and calls the gRPC service.
-   * 
+   *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleUpdateApiKey(Context ctx) {
@@ -713,29 +691,11 @@ public class Main {
 
     Map<String, Object> json = ctx.bodyAsClass(Map.class);
 
-    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> replaceLabels = (Map<String, String>) json.get("replace_labels");
-      StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(replaceLabels);
-      requestBuilder.setReplaceLabels(labelsBuilder.build());
-    }
-    
-    if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> mergeLabels = (Map<String, String>) json.get("merge_labels");
-      StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(mergeLabels);
-      requestBuilder.setMergeLabels(labelsBuilder.build());
-    }
-    
-    // Legacy support for "labels" field - treat as replace_labels
+    // ApiKey uses direct map rather than StringMap wrapper
     if (json.containsKey("labels") && json.get("labels") instanceof Map) {
       @SuppressWarnings("unchecked")
       Map<String, String> labels = (Map<String, String>) json.get("labels");
-      StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(labels);
-      requestBuilder.setReplaceLabels(labelsBuilder.build());
+      requestBuilder.putAllLabels(labels);
     }
 
     if (json.containsKey("status")) {
@@ -755,7 +715,7 @@ public class Main {
   /**
    * Handles a REST request to delete an API Key by ID.
    * Converts the hex UUID to binary format and calls the gRPC service.
-   * 
+   *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleDeleteApiKey(Context ctx) {
@@ -904,7 +864,7 @@ public class Main {
 
   /**
    * Helper method to set an error response with appropriate HTTP status code.
-   * 
+   *
    * @param ctx The Javalin context to set the response on
    * @param statusCode The HTTP status code to set
    * @param message The error message to include in the response

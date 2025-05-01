@@ -22,6 +22,15 @@ import java.util.UUID;
  * This creates a root user and API key when the system is first set up.
  */
 public class SystemInitOperation {
+    /** The username of the root user. */
+    public static final String ROOT_USERNAME = "root";
+
+    /** The email of the root user. */
+    public static final String ROOT_EMAIL = "root@goodmem.ai";
+
+    /** The display name of the root user. */
+    public static final String ROOT_DISPLAY_NAME = "System Root User";
+
     private final Connection dbConnection;
 
     /**
@@ -67,8 +76,8 @@ public class SystemInitOperation {
         Logger.info("Executing system initialization operation");
 
         try {
-            // Check if 'root' user already exists
-            StatusOr<Optional<User>> rootUserOr = Users.loadByUsername(dbConnection, "root");
+            // Check if root user already exists
+            StatusOr<Optional<User>> rootUserOr = Users.loadByUsername(dbConnection, ROOT_USERNAME);
             if (rootUserOr.isNotOk()) {
                 Logger.error("Failed to check for root user: {}", rootUserOr.getStatus().getMessage());
                 return InitResult.error("Root user lookup failed.");
@@ -86,9 +95,9 @@ public class SystemInitOperation {
 
             User rootUser = new User(
                     rootUserId,
-                    "root",
-                    "root@goodmem.ai",
-                    "System Root User",
+                    ROOT_USERNAME,
+                    ROOT_EMAIL,
+                    ROOT_DISPLAY_NAME,
                     now,
                     now
             );
