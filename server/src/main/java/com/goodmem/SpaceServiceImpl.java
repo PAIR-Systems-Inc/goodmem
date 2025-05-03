@@ -1,5 +1,9 @@
 package com.goodmem;
 
+import com.goodmem.db.util.UuidUtil;
+import com.goodmem.security.AuthInterceptor;
+import com.goodmem.security.Permission;
+import com.goodmem.security.User;
 import com.google.common.io.BaseEncoding;
 import com.google.protobuf.Empty;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -15,17 +19,11 @@ import goodmem.v1.SpaceOuterClass.ListSpacesResponse;
 import goodmem.v1.SpaceOuterClass.Space;
 import goodmem.v1.SpaceOuterClass.UpdateSpaceRequest;
 import goodmem.v1.SpaceServiceGrpc.SpaceServiceImplBase;
-import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
-import org.tinylog.Logger;
-
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
+import org.tinylog.Logger;
 
 public class SpaceServiceImpl extends SpaceServiceImplBase {
   private static final int DEFAULT_MAX_RESULTS = 50;
@@ -405,7 +403,7 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
       ListSpacesRequest request, StreamObserver<ListSpacesResponse> responseObserver) {
     
     // Get the authenticated user from the Context
-    com.goodmem.security.User authenticatedUser = com.goodmem.security.AuthInterceptor.USER_CONTEXT_KEY.get();
+    User authenticatedUser = AuthInterceptor.USER_CONTEXT_KEY.get();
     if (authenticatedUser == null) {
       Logger.error("No authentication context found");
       responseObserver.onError(
@@ -418,8 +416,8 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
     Logger.info("Listing spaces with label selectors: {}", request.getLabelSelectorsMap());
     
     // Check permissions
-    boolean hasAnyPermission = authenticatedUser.hasPermission(com.goodmem.security.Permission.LIST_SPACE_ANY);
-    boolean hasOwnPermission = authenticatedUser.hasPermission(com.goodmem.security.Permission.LIST_SPACE_OWN);
+    boolean hasAnyPermission = authenticatedUser.hasPermission(Permission.LIST_SPACE_ANY);
+    boolean hasOwnPermission = authenticatedUser.hasPermission(Permission.LIST_SPACE_OWN);
     
     // User must have at least LIST_SPACE_OWN permission
     if (!hasAnyPermission && !hasOwnPermission) {
@@ -460,7 +458,7 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
         // Retrieve parameters from the token
         if (token.hasOwnerId()) {
           com.goodmem.common.status.StatusOr<UUID> ownerIdOr = 
-              com.goodmem.db.util.UuidUtil.fromProtoBytes(token.getOwnerId());
+              UuidUtil.fromProtoBytes(token.getOwnerId());
           
           if (ownerIdOr.isNotOk()) {
             Logger.error("Invalid owner ID format in token: {}", ownerIdOr.getStatus().getMessage());

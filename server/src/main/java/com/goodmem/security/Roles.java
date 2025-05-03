@@ -96,7 +96,8 @@ public enum Roles {
           Permission.CREATE_SPACE_OWN,
           Permission.DISPLAY_SPACE_OWN,
           Permission.UPDATE_SPACE_OWN,
-          Permission.DELETE_SPACE_OWN) {
+          Permission.DELETE_SPACE_OWN,
+          Permission.LIST_SPACE_OWN) {
         @Override
         public String getName() {
           return "USER";

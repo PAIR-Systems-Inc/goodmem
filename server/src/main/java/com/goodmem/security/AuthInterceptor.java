@@ -1,15 +1,21 @@
 package com.goodmem.security;
 
+import com.goodmem.common.status.StatusOr;
+import com.goodmem.db.ApiKeys.UserWithApiKey;
 import io.grpc.Context;
 import io.grpc.Contexts;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
-import java.util.logging.Logger;
+import io.grpc.Status;
+import java.util.Optional;
+import org.tinylog.Logger;
 
+/**
+ * Intercept requests and lookup user profile information.
+ */
 public class AuthInterceptor implements ServerInterceptor {
-  private static final Logger logger = Logger.getLogger(AuthInterceptor.class.getName());
   protected static final Metadata.Key<String> API_KEY_METADATA_KEY =
       Metadata.Key.of("x-api-key", Metadata.ASCII_STRING_MARSHALLER);
 
@@ -22,34 +28,40 @@ public class AuthInterceptor implements ServerInterceptor {
     this.dataSource = dataSource;
   }
 
+  private <ReqT, RespT> ServerCall.Listener<ReqT> abortUnauthenticated(
+      ServerCall<ReqT, RespT> call, String errorMsg) {
+    Logger.warn("Authentication failed: {}", errorMsg);
+    call.close(
+        Status.UNAUTHENTICATED.withDescription(errorMsg),
+        new Metadata()); // Close the call
+    return new ServerCall.Listener<ReqT>() {};
+  }
+
   @Override
   public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
       ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
 
     String apiKeyString = headers.get(API_KEY_METADATA_KEY);
-    logger.info("API Key: " + (apiKeyString != null ? "present" : "absent"));
+    Logger.info("API Key: {}", (apiKeyString != null ? "present" : "absent"));
     
     // No API key provided - cannot authenticate
     if (apiKeyString == null || apiKeyString.isEmpty()) {
-      logger.warning("No API key provided");
-      return next.startCall(call, headers);
+      return abortUnauthenticated(call, "No API key provided.");
     }
     
     // Attempt to authenticate with the provided API key
     try (java.sql.Connection conn = dataSource.getConnection()) {
       // Look up user by API key
-      com.goodmem.common.status.StatusOr<java.util.Optional<com.goodmem.db.ApiKeys.UserWithApiKey>> userOr = 
+      StatusOr<Optional<UserWithApiKey>> userOr =
           com.goodmem.db.ApiKeys.getUserByApiKey(conn, apiKeyString);
           
       if (!userOr.isOk()) {
-        logger.warning("Error looking up API key: " + userOr.getStatus().getMessage());
-        return next.startCall(call, headers);
+        return abortUnauthenticated(call, "Error looking up API key.");
       }
       
-      java.util.Optional<com.goodmem.db.ApiKeys.UserWithApiKey> userWithKeyOpt = userOr.getValue();
+      Optional<com.goodmem.db.ApiKeys.UserWithApiKey> userWithKeyOpt = userOr.getValue();
       if (userWithKeyOpt.isEmpty()) {
-        logger.warning("Invalid or expired API key");
-        return next.startCall(call, headers);
+        return abortUnauthenticated(call, "Invalid or expired API key.");
       }
       
       // We have a valid user - create security user with appropriate role
@@ -72,9 +84,8 @@ public class AuthInterceptor implements ServerInterceptor {
       return Contexts.interceptCall(context, call, headers, next);
       
     } catch (Exception e) {
-      logger.warning("Error during authentication: " + e.getMessage());
-      // Continue without authentication
-      return next.startCall(call, headers);
+      Logger.error(e, "Unexpected failure during authentication.");
+      return abortUnauthenticated(call, "Error during authentication.");
     }
   }
 }

@@ -56,6 +56,7 @@ docker run --rm \
            --go_opt=paths=source_relative \
            --connect-go_out=/output \
            --connect-go_opt=paths=source_relative \
+           /proto/goodmem/v1/common.proto \
            /proto/goodmem/v1/space.proto \
            /proto/goodmem/v1/user.proto \
            /proto/goodmem/v1/memory.proto \
