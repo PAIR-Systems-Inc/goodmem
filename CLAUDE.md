@@ -224,6 +224,8 @@
   - Always check the actual generated class names in `build/generated/sources/proto/main/java/`
 
 ### Go Best Practices
+
+#### General Go Guidelines
 - Always check all error return values (required by golangci-lint)
 - Use specific Go version in go.mod (e.g., `go 1.22`)
 - Prefer standard library packages when possible
@@ -237,6 +239,33 @@
   - github.com/bufbuild/connect-go v1.10.0 (not higher)
   - github.com/spf13/cobra v1.9.x (not v2.x)
   - google.golang.org/protobuf v1.36.x
+
+#### Cobra CLI Implementation Patterns
+
+- **Command Structure**:
+  - Group related commands under a common parent (e.g., `space list`, `space create`)
+  - Use consistent command naming across services (`list`, `get`, `create`, `update`, `delete`)
+  - Define shared variables at the package level for flags used by multiple commands
+  - Initialize all commands and flags in the `init()` function
+
+- **Flag Design**:
+  - Use short flags (-l) for common options, full flags (--label) for all options
+  - Follow flag naming conventions from popular CLI tools (kubectl, docker, etc.)
+  - Provide descriptive help text for all flags
+  - Set sensible defaults for optional flags
+  - Mark required flags using `MarkFlagRequired()`
+
+- **Command Documentation**:
+  - Use the `Example:` field to show real-world usage patterns
+  - Include complete command examples with flags
+  - Add line comments explaining the purpose of each example
+  - Follow a consistent command example format throughout the CLI
+
+- **Protocol Buffer Handling**:
+  - Use helper functions for common conversions (UUID, timestamp, etc.)
+  - Handle optional fields properly with pointers in request messages
+  - Reference field presence with `cmd.Flags().Changed()` before setting optional fields
+  - Use proper oneof patterns for mutually exclusive fields
 
 ## Common Commands
 - **Build all**: `./gradlew build`
@@ -291,7 +320,43 @@ The project includes several developer tools to streamline development workflows
     - Format entire directory: `./server/format_java.sh path/to/directory`
     - Default (no args): formats all Java files in server/src
 
-### CLI Tools
+### CLI Development
+
+#### CLI Command Design Patterns
+
+- **Output Formats**: Each list/get command should support multiple output formats:
+  - `table`: Human-readable tabular output with headers (default)
+  - `json`: REST-friendly JSON for programmatic consumption
+  - `compact`: Condensed single-line format for scripting
+  - `quiet`: Output only identifiers for piping to other commands
+
+- **Table Format Guidelines**:
+  - Display complete entity IDs to enable direct use in follow-up commands
+  - Include sort indicators (↑/↓) in column headers when sorting is applied
+  - Limit column width with appropriate truncation for readability
+  - Organize columns from most to least important, left to right
+  - Use consistent date/time formatting across all commands
+
+- **JSON Formatting Standards**:
+  - Convert binary UUIDs to standard string format (8-4-4-4-12)
+  - Format timestamps as ISO 8601 strings (e.g., "2025-05-02T00:05:40.841Z")
+  - Use camelCase property names to follow REST conventions
+  - Maintain proper ID capitalization (e.g., "spaceID" not "spaceId")
+  - Remove empty/null fields to reduce response size
+
+- **Pagination Pattern**:
+  - Support pagination tokens for large result sets
+  - Show helpful "next page" command examples in outputs
+  - Display tokens in a way that can be easily copied and reused
+  - Include all filter parameters in the next-page example command
+
+- **Error Handling Approach**:
+  - Provide user-friendly error messages for common errors
+  - Distinguish between client-side validation and server-side errors
+  - Use `SilenceUsage: true` after client-side validation to avoid redundant help text
+  - Map server error codes to specific, actionable error messages
+
+#### CLI Infrastructure
 
 - **`cli/build.sh`**: Reproducible CLI build script
   - Uses Docker to create a consistent build environment
@@ -303,6 +368,12 @@ The project includes several developer tools to streamline development workflows
   - Generates Go code from protocol buffer definitions
   - Updates import paths and package names automatically
   - Usage: `./cli/gen_proto.sh`
+  - **Important**: Include all proto files in the generation command, including common.proto
+
+- **Utility Functions**: Implement reusable utilities for common operations:
+  - `json_formatter.go`: Central utility for REST-friendly JSON formatting
+  - `truncateString()`: Standard string truncation with ellipsis for display
+  - UUID conversion: Binary UUID to string representation and vice versa
 
 ### Git Hooks
 
