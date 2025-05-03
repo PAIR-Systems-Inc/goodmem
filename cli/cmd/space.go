@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -281,18 +280,18 @@ var listSpacesCmd = &cobra.Command{
   # Filter spaces by owner
   goodmem space list --owner 123e4567-e89b-12d3-a456-426614174000
 
-  # Sort spaces by name in ascending order
+  # Sort spaces by name in ascending order (shows a sort indicator in the header)
   goodmem space list --sort-by name --sort-order asc
 
-  # Paginate results (50 per page by default)
+  # Paginate results (default page size is 50)
   goodmem space list --max-results 10
   
   # Get the next page of results using the token from previous output
   goodmem space list --next-token "eyJzdGFydCI6MTAsIm..."
 
   # Get output in different formats
-  goodmem space list --format json     # Detailed JSON
-  goodmem space list --format table    # Tabular output (default)
+  goodmem space list --format json     # Detailed JSON output
+  goodmem space list --format table    # Tabular output with headers (default)
   goodmem space list --format compact  # Compact single-line format
 
   # Get only space IDs (for scripting)
@@ -401,10 +400,10 @@ var listSpacesCmd = &cobra.Command{
 				fmt.Println(spaceIDStr)
 			}
 		} else if outputFormat == "json" {
-			// Print the full JSON response
-			jsonBytes, err := json.MarshalIndent(resp.Msg, "", "  ")
+			// Use our custom formatter for REST-friendly JSON
+			jsonBytes, err := formatProtoMessageAsJSON(resp.Msg)
 			if err != nil {
-				return fmt.Errorf("error marshaling response: %w", err)
+				return fmt.Errorf("error formatting response as JSON: %w", err)
 			}
 			fmt.Println(string(jsonBytes))
 		} else if outputFormat == "compact" {
@@ -415,57 +414,46 @@ var listSpacesCmd = &cobra.Command{
 					spaceIDStr = fmt.Sprintf("<invalid-uuid:%x>", space.SpaceId)
 				}
 				
-				ownerIDStr, err := uuidBytesToString(space.OwnerId)
-				if err != nil {
-					ownerIDStr = fmt.Sprintf("<invalid-uuid:%x>", space.OwnerId)
-				}
-				
-				// Truncate IDs if requested
-				if !noTruncate {
-					spaceIDStr = truncateString(spaceIDStr, 8)
-					ownerIDStr = truncateString(ownerIDStr, 8)
-				}
-				
 				// Format created time
 				createdTime := "N/A"
 				if space.CreatedAt != nil {
 					createdTime = formatTimestamp(space.CreatedAt)
 				}
 				
-				fmt.Printf("%s\t%s\t%s\t%s\t%v\t%d labels\n",
-					spaceIDStr,
-					truncateString(space.Name, 30),
-					ownerIDStr,
-					createdTime,
-					space.PublicRead,
-					len(space.Labels),
-				)
+				fmt.Printf("%s\t%s\t%s\t%v\n", spaceIDStr, truncateString(space.Name, 30), createdTime, space.PublicRead)
 			}
 		} else { // Default table format
 			if totalCount == 0 {
 				fmt.Println("No spaces found matching the criteria.")
 			} else {
+				// Determine if we need to show sort indicator
+				nameHeader := "NAME"
+				createdHeader := "CREATED"
+				if cmd.Flags().Changed("sort-by") && cmd.Flags().Changed("sort-order") {
+					// Add sort indicator based on sort field and direction
+					sortIndicator := "↑"
+					if sortOrder == "desc" {
+						sortIndicator = "↓"
+					}
+					
+					switch sortBy {
+					case "name":
+						nameHeader = fmt.Sprintf("NAME %s", sortIndicator)
+					case "created_at":
+						createdHeader = fmt.Sprintf("CREATED %s", sortIndicator)
+					}
+				}
+				
 				// Print table header
-				fmt.Printf("%-12s %-30s %-12s %-20s %-7s %s\n",
-					"SPACE ID", "NAME", "OWNER ID", "CREATED", "PUBLIC", "LABELS")
-				fmt.Println(strings.Repeat("-", 90))
+				fmt.Printf("%-36s %-30s %-20s %-7s\n",
+					"SPACE ID", nameHeader, createdHeader, "PUBLIC")
+				fmt.Println(strings.Repeat("-", 95))
 				
 				// Print table rows
 				for _, space := range resp.Msg.Spaces {
 					spaceIDStr, err := uuidBytesToString(space.SpaceId)
 					if err != nil {
 						spaceIDStr = fmt.Sprintf("<invalid-uuid:%x>", space.SpaceId)
-					}
-					
-					ownerIDStr, err := uuidBytesToString(space.OwnerId)
-					if err != nil {
-						ownerIDStr = fmt.Sprintf("<invalid-uuid:%x>", space.OwnerId)
-					}
-					
-					// Truncate IDs if requested
-					if !noTruncate {
-						spaceIDStr = truncateString(spaceIDStr, 8)
-						ownerIDStr = truncateString(ownerIDStr, 8)
 					}
 					
 					// Format created time
@@ -475,31 +463,7 @@ var listSpacesCmd = &cobra.Command{
 						createdTime = t.Format("2006-01-02 15:04:05")
 					}
 					
-					// Format labels count or keys
-					labelInfo := fmt.Sprintf("%d", len(space.Labels))
-					if len(space.Labels) > 0 && !noTruncate {
-						// Show first few label keys
-						keys := make([]string, 0, len(space.Labels))
-						for k := range space.Labels {
-							keys = append(keys, k)
-						}
-						if len(keys) > 3 {
-							keys = keys[:3]
-						}
-						labelInfo = strings.Join(keys, ",")
-						if len(space.Labels) > 3 {
-							labelInfo += "..."
-						}
-					}
-					
-					fmt.Printf("%-12s %-30s %-12s %-20s %-7v %s\n",
-						spaceIDStr,
-						truncateString(space.Name, 30),
-						ownerIDStr,
-						createdTime,
-						space.PublicRead,
-						labelInfo,
-					)
+					fmt.Printf("%-36s %-30s %-20s %-7v\n", spaceIDStr, truncateString(space.Name, 30), createdTime, space.PublicRead)
 				}
 			}
 		}
@@ -658,10 +622,10 @@ var getSpaceCmd = &cobra.Command{
 			return fmt.Errorf("unexpected error: %w", err)
 		}
 
-		// Print the space details (for now keeping JSON format)
-		jsonBytes, err := json.MarshalIndent(resp.Msg, "", "  ")
+		// Print the space details using our custom JSON formatter
+		jsonBytes, err := formatProtoMessageAsJSON(resp.Msg)
 		if err != nil {
-			return fmt.Errorf("error marshaling response: %w", err)
+			return fmt.Errorf("error formatting response as JSON: %w", err)
 		}
 		fmt.Println(string(jsonBytes))
 		return nil
@@ -770,10 +734,10 @@ var updateSpaceCmd = &cobra.Command{
 			return fmt.Errorf("unexpected error: %w", err)
 		}
 
-		// Print the updated space (for now keeping JSON format)
-		jsonBytes, err := json.MarshalIndent(resp.Msg, "", "  ")
+		// Print the updated space using our custom JSON formatter
+		jsonBytes, err := formatProtoMessageAsJSON(resp.Msg)
 		if err != nil {
-			return fmt.Errorf("error marshaling response: %w", err)
+			return fmt.Errorf("error formatting response as JSON: %w", err)
 		}
 		fmt.Println(string(jsonBytes))
 		return nil
