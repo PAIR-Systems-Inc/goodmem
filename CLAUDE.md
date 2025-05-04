@@ -59,118 +59,478 @@
 - Make proto field additions backward compatible
 
 ### Server Implementation Patterns
+
+#### Service Implementation Class Pattern
 - **Service Implementation Classes**: Create a separate `*ServiceImpl.java` class for each protocol buffer service
   - Extend the generated `*ImplBase` class (e.g., `SpaceServiceImplBase`)
   - Implement all methods defined in the service with the StreamObserver pattern
   - Return dummy data in implementation stubs until database integration
   - Use Java records for configuration objects (immutable configuration)
-- **Authentication Flow Pattern**:
-  - Every service method first retrieves the authenticated user from the context
-  - Use `com.goodmem.security.User authenticatedUser = AuthInterceptor.USER_CONTEXT_KEY.get();`
-  - Check authentication before any other operations
-  - Return early with UNAUTHENTICATED error if no authentication context exists
-  - Example pattern:
-    ```java
-    com.goodmem.security.User authenticatedUser = AuthInterceptor.USER_CONTEXT_KEY.get();
-    if (authenticatedUser == null) {
-      Logger.error("No authentication context found");
-      responseObserver.onError(
-          io.grpc.Status.UNAUTHENTICATED
-              .withDescription("Authentication required")
-              .asRuntimeException());
-      return;
-    }
-    ```
-- **Permission Check Pattern**:
-  - Check permissions immediately after authentication validation
-  - Distinguish between broad permissions (ANY) vs limited permissions (OWN)
-  - Implement special handling when user only has limited permissions
-  - All permission validation must happen before any database operations
-  - Example pattern:
-    ```java
-    boolean hasAnyPermission = authenticatedUser.hasPermission(Permission.DISPLAY_RESOURCE_ANY);
-    boolean hasOwnPermission = authenticatedUser.hasPermission(Permission.DISPLAY_RESOURCE_OWN);
-    
-    if (!hasAnyPermission && !hasOwnPermission) {
-      Logger.error("User lacks necessary permissions for this operation");
-      responseObserver.onError(
-          io.grpc.Status.PERMISSION_DENIED
-              .withDescription("Permission denied")
-              .asRuntimeException());
-      return;
-    }
-    ```
-- **Fallback to Authenticated User**:
-  - When no explicit parameters are provided, service should default to using the authenticated user's data
-  - This pattern applies for both broad and limited permission sets
-  - Example:
-    ```java
-    // If neither field is provided, default to the authenticated user
-    if (!userIdProvided && !emailProvided) {
-      requestedUserId = authenticatedUser.getId();
-    }
-    ```
-- **Parameter Validation with Contextual Logic**:
-  - Implement parameter validation based on permission context
-  - For limited permissions (OWN), validate parameters match the authenticated user
-  - For broad permissions (ANY), handle multiple parameters with clear priority
-  - Log warnings when ignoring parameters (e.g., when both user_id and email are provided)
-- **Multi-criteria Lookup Pattern**:
+
+#### Service Operation Patterns
+
+1. **Authentication Flow Pattern**
+
+All service methods follow a standard authentication pattern that retrieves the authenticated user from the gRPC context and checks if the user is authenticated. This is consistently the *first* check in every service method.
+
+```java
+import com.goodmem.security.AuthInterceptor;
+import com.goodmem.security.User;
+import io.grpc.Status;
+import org.tinylog.Logger;
+
+// Get the authenticated user from the Context
+User authenticatedUser = AuthInterceptor.USER_CONTEXT_KEY.get();
+if (authenticatedUser == null) {
+  Logger.error("No authentication context found");
+  responseObserver.onError(
+      Status.UNAUTHENTICATED
+          .withDescription("Authentication required")
+          .asRuntimeException());
+  return;
+}
+```
+
+2. **Permission Checking Pattern**
+
+After authentication, services check permissions using a consistent pattern that distinguishes between broad permissions (ANY) and limited permissions (OWN) with clear permission naming that follows the pattern: `[ACTION]_[RESOURCE]_[SCOPE]`.
+
+```java
+import com.goodmem.security.Permission;
+import io.grpc.Status;
+import org.tinylog.Logger;
+
+// Check permissions
+boolean hasAnyPermission = authenticatedUser.hasPermission(Permission.ACTION_RESOURCE_ANY);
+boolean hasOwnPermission = authenticatedUser.hasPermission(Permission.ACTION_RESOURCE_OWN);
+
+// User must have at least OWN permission
+if (!hasAnyPermission && !hasOwnPermission) {
+  Logger.error("User lacks necessary permissions for this operation");
+  responseObserver.onError(
+      Status.PERMISSION_DENIED
+          .withDescription("Permission denied")
+          .asRuntimeException());
+  return;
+}
+```
+
+3. **Ownership-Based Permission Enforcement Pattern**
+
+When checking permissions for specific resources, the code first loads the resource to check ownership, then applies permission checks based on whether the user owns the resource or not.
+
+```java
+import com.goodmem.security.Permission;
+import io.grpc.Status;
+import org.tinylog.Logger;
+
+// Check permissions based on ownership
+boolean isOwner = resource.ownerId().equals(authenticatedUser.getId());
+boolean hasAnyPermission = authenticatedUser.hasPermission(Permission.ACTION_RESOURCE_ANY);
+boolean hasOwnPermission = authenticatedUser.hasPermission(Permission.ACTION_RESOURCE_OWN);
+
+// If user is not the owner, they must have ACTION_RESOURCE_ANY permission
+if (!isOwner && !hasAnyPermission) {
+  Logger.error("User lacks permission for resources owned by others");
+  responseObserver.onError(
+      Status.PERMISSION_DENIED
+          .withDescription("Permission denied")
+          .asRuntimeException());
+  return;
+}
+
+// If user is the owner, they must have at least ACTION_RESOURCE_OWN permission
+if (isOwner && !hasAnyPermission && !hasOwnPermission) {
+  Logger.error("User lacks necessary permissions for their own resources");
+  responseObserver.onError(
+      Status.PERMISSION_DENIED
+          .withDescription("Permission denied")
+          .asRuntimeException());
+  return;
+}
+```
+
+4. **Parameter Validation Pattern**
+
+Input parameters are validated before any database operations occur. The validation follows a consistent pattern with detailed error messages, using Guava's utility methods for string validation when appropriate.
+
+```java
+import com.google.common.base.Strings;
+import io.grpc.Status;
+import org.tinylog.Logger;
+
+// Validate required string fields using Guava
+if (Strings.isNullOrEmpty(request.getSomeRequiredField())) {
+  Logger.error("Field is required");
+  responseObserver.onError(
+      Status.INVALID_ARGUMENT
+          .withDescription("Field is required")
+          .asRuntimeException());
+  return;
+}
+
+// For optional fields, check the has* methods generated by protobuf
+if (request.hasSomeOptionalField()) {
+  // Process the optional field...
+}
+```
+
+5. **UUID Conversion Pattern**
+
+Binary UUIDs from protocol buffers are consistently converted to Java UUIDs using utility methods that provide error handling.
+
+```java
+import com.goodmem.common.status.StatusOr;
+import com.goodmem.db.util.UuidUtil;
+import io.grpc.Status;
+import org.tinylog.Logger;
+
+import java.util.UUID;
+
+// Validate and convert UUID
+StatusOr<UUID> idOr = UuidUtil.fromProtoBytes(request.getId());
+
+if (idOr.isNotOk()) {
+  Logger.error("Invalid ID format: {}", idOr.getStatus().getMessage());
+  responseObserver.onError(
+      Status.INVALID_ARGUMENT
+          .withDescription("Invalid ID format")
+          .asRuntimeException());
+  return;
+}
+
+UUID id = idOr.getValue();
+```
+
+6. **Fallback to Authenticated User Pattern**
+
+When certain parameters are optional (such as owner_id), the code falls back to using the authenticated user's ID.
+
+```java
+// No owner_id provided, use authenticated user's ID
+if (!request.hasOwnerId()) {
+  ownerId = authenticatedUser.getId();
+}
+```
+
+7. **Database Operation Pattern**
+
+Database operations use try-with-resources for connection handling and a StatusOr pattern for error handling.
+
+```java
+import com.goodmem.common.status.StatusOr;
+import io.grpc.Status;
+import org.tinylog.Logger;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Optional;
+import java.util.UUID;
+
+try (Connection connection = config.dataSource().getConnection()) {
+  // Load the resource to check ownership
+  StatusOr<Optional<Entity>> entityOr = 
+      com.goodmem.db.Entities.loadById(connection, entityId);
+      
+  if (entityOr.isNotOk()) {
+    Logger.error("Error loading entity: {}", entityOr.getStatus().getMessage());
+    responseObserver.onError(
+        Status.INTERNAL
+            .withDescription("Unexpected error while processing request.")
+            .asRuntimeException());
+    return;
+  }
+  
+  // Check if resource exists
+  if (entityOr.getValue().isEmpty()) {
+    Logger.error("Entity not found: {}", entityId);
+    responseObserver.onError(
+        Status.NOT_FOUND
+            .withDescription("Entity not found")
+            .asRuntimeException());
+    return;
+  }
+  
+  // Continue processing...
+}
+```
+
+8. **Generic Error Handling Pattern**
+
+Error handling follows a standard pattern with detailed internal logging but generic messages to clients.
+
+```java
+import io.grpc.Status;
+import org.tinylog.Logger;
+
+import java.sql.SQLException;
+
+try {
+  // Database or processing operation
+} catch (SQLException e) {
+  Logger.error(e, "Database error: {}", e.getMessage());
+  responseObserver.onError(
+      Status.INTERNAL
+          .withDescription("Unexpected error while processing request.")
+          .asRuntimeException());
+} catch (Exception e) {
+  Logger.error(e, "Unexpected error: {}", e.getMessage());
+  responseObserver.onError(
+      Status.INTERNAL
+          .withDescription("Unexpected error while processing request.")
+          .asRuntimeException());
+}
+```
+
+9. **Pagination Token Pattern**
+
+For paginated methods, there's a consistent pattern for handling pagination tokens.
+
+```java
+import com.goodmem.common.status.StatusOr;
+import io.grpc.Status;
+import org.tinylog.Logger;
+
+// Handle pagination token if provided
+if (request.hasNextToken()) {
+  StatusOr<NextPageToken> tokenOr = 
+      decodeAndValidateNextPageToken(request.getNextToken(), authenticatedUser);
+  
+  if (tokenOr.isNotOk()) {
+    Logger.error("Invalid pagination token: {}", tokenOr.getStatus().getMessage());
+    responseObserver.onError(
+        Status.INVALID_ARGUMENT
+            .withDescription("Invalid pagination token")
+            .asRuntimeException());
+    return;
+  }
+  
+  // Extract parameters from token
+  // ...
+}
+```
+
+10. **Response Builder Pattern**
+
+When constructing responses, especially for list operations, the code uses a builder pattern with conditional fields.
+
+```java
+// Create the response builder
+ResponseType.Builder responseBuilder = ResponseType.newBuilder();
+
+// Add the entities to the response
+for (Entity entity : queryResult.getEntities()) {
+  responseBuilder.addEntities(entity.toProto());
+}
+
+// Add next page token if needed
+if (queryResult.hasMore(offset, limit)) {
+  int nextOffset = queryResult.getNextOffset(offset, limit);
+  String encodedToken = encodeNextPageToken(createNextPageToken(...));
+  responseBuilder.setNextToken(encodedToken);
+}
+
+// Return the response
+responseObserver.onNext(responseBuilder.build());
+responseObserver.onCompleted();
+```
+
+11. **Update Strategy Pattern with Oneof**
+
+The update operations use a pattern with the Protocol Buffer `oneof` feature to handle different update strategies, such as replacing vs. merging field values.
+
+```java
+import java.util.HashMap;
+import java.util.Map;
+
+// Check which update strategy is being used
+boolean hasReplaceLabels = request.getLabelUpdateStrategyCase() == UpdateRequest.LabelUpdateStrategyCase.REPLACE_LABELS;
+boolean hasMergeLabels = request.getLabelUpdateStrategyCase() == UpdateRequest.LabelUpdateStrategyCase.MERGE_LABELS;
+
+// Process based on update strategy
+Map<String, String> newLabels;
+if (hasReplaceLabels) {
+  // Replace all existing labels with the ones provided
+  newLabels = new HashMap<>(request.getReplaceLabels().getLabelsMap());
+} else if (hasMergeLabels) {
+  // Merge existing labels with new ones
+  newLabels = new HashMap<>(existingEntity.labels());
+  newLabels.putAll(request.getMergeLabels().getLabelsMap());
+} else {
+  // No label changes, keep existing labels
+  newLabels = existingEntity.labels();
+}
+```
+
+12. **Multi-criteria Lookup Pattern**:
   - Implement clear priority and fallback logic for multiple lookup parameters
   - Document the complete lookup behavior in method comments
   - Follow consistent patterns for handling multiple parameters across all services
-- **REST to gRPC Bridging**:
+
+13. **REST to gRPC Bridging**:
   - Create a blocking stub for each service in `Main.java`
   - Use in-process channels for efficiency: `InProcessChannelBuilder.forName("in-process").build()`
   - Follow consistent naming pattern for handler methods: `handle<Service><Method>`
   - Convert JSON request bodies to protocol buffer requests using appropriate builders
   - Convert protocol buffer responses to JSON using utility methods
-- **Database Operation Pattern**:
-  - Use try-with-resources for connection handling
-  - Use StatusOr pattern for error handling and database operation results
-  - Implement conditional database operations based on available parameters
-  - Example pattern:
-    ```java
-    try (Connection connection = config.dataSource().getConnection()) {
-      StatusOr<Optional<User>> userOr;
-      
-      if (requestedUserId != null) {
-        userOr = com.goodmem.db.Users.loadById(connection, requestedUserId);
-      } else if (requestedEmail != null) {
-        userOr = com.goodmem.db.Users.loadByEmail(connection, requestedEmail);
-      } else {
-        // Handle error case
+
+14. **Authorization and Resource Filtering Pattern**
+
+For list operations, there's a pattern for handling different permission levels with resource filtering:
+
+```java
+import com.goodmem.security.Permission;
+import io.grpc.Status;
+import org.tinylog.Logger;
+
+import java.util.UUID;
+
+// Determine the filtering based on permissions
+UUID ownerIdFilter = null;
+boolean includePublic = hasAnyPermission;
+
+if (hasAnyPermission) {
+  // With LIST_RESOURCE_ANY permission:
+  // - If an owner ID was requested, use it as a filter
+  // - If no owner ID was requested, show all resources (no owner filter)
+  ownerIdFilter = requestedOwnerId;
+} else if (hasOwnPermission) {
+  // With only LIST_RESOURCE_OWN permission:
+  // - If an owner ID was requested and it's not the authenticated user, reject
+  // - Otherwise, filter to only show the authenticated user's resources
+  if (requestedOwnerId != null && !requestedOwnerId.equals(authenticatedUser.getId())) {
+    Logger.error("User lacks permission to list resources owned by others");
+    responseObserver.onError(
+        Status.PERMISSION_DENIED
+            .withDescription("Permission denied")
+            .asRuntimeException());
+    return;
+  }
+  
+  // Always filter by authenticated user ID when only having LIST_RESOURCE_OWN
+  ownerIdFilter = authenticatedUser.getId();
+  includePublic = false; // Don't include public resources with only OWN permission
+}
+```
+
+15. **Service Configuration Pattern**
+
+Services use Java records for configuration objects, making them immutable and providing clarity about dependencies.
+
+```java
+import com.zaxxer.hikari.HikariDataSource;
+
+/**
+ * Configuration for the service implementation.
+ */
+public record Config(HikariDataSource dataSource, String defaultModel) {}
+
+public ServiceImpl(Config config) {
+  this.config = config;
+}
+```
+
+#### Entity and Data Access Patterns
+
+1. **Record-Based Entity Definition Pattern**
+
+Entities use Java records for immutability and clear field definition. Each entity record includes:
+- Standard audit fields (created_at, updated_at, created_by_id, updated_by_id)
+- A `toProto()` method to convert from database representation to protocol buffer representation
+
+```java
+import com.goodmem.db.util.DbUtil;
+import com.goodmem.db.util.UuidUtil;
+
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+
+public record Entity(
+    UUID entityId,
+    UUID ownerId,
+    String name,
+    Map<String, String> labels,
+    boolean publicRead,
+    Instant createdAt,
+    Instant updatedAt,
+    UUID createdById,
+    UUID updatedById) {
+  
+  /**
+   * Converts this database record to its corresponding Protocol Buffer message.
+   */
+  public proto.Entity toProto() {
+    proto.Entity.Builder builder =
+        proto.Entity.newBuilder()
+            .setEntityId(UuidUtil.toProtoBytes(entityId))
+            .setOwnerId(UuidUtil.toProtoBytes(ownerId))
+            .setName(name)
+            .setPublicRead(publicRead)
+            .setCreatedAt(DbUtil.toProtoTimestamp(createdAt))
+            .setUpdatedAt(DbUtil.toProtoTimestamp(updatedAt))
+            .setCreatedById(UuidUtil.toProtoBytes(createdById))
+            .setUpdatedById(UuidUtil.toProtoBytes(updatedById));
+
+    // Add labels if present
+    if (labels != null) {
+      builder.putAllLabels(labels);
+    }
+
+    return builder.build();
+  }
+}
+```
+
+2. **Database Access Pattern**
+
+Database access follows a consistent pattern with:
+- Static utility methods for operations (save, load, delete, query)
+- Methods that return StatusOr for robust error handling
+- Consistent error propagation
+- SQL queries defined as multi-line strings
+- Parameter binding using prepared statements
+
+```java
+import com.goodmem.common.status.StatusOr;
+
+import javax.annotation.Nonnull;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Optional;
+import java.util.UUID;
+
+@Nonnull
+public static StatusOr<Optional<Entity>> loadById(Connection conn, UUID entityId) {
+  String sql =
+      """
+      SELECT entity_id, owner_id, name, labels, public_read,
+             created_at, updated_at, created_by_id, updated_by_id
+        FROM entity
+       WHERE entity_id = ?
+      """;
+  try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+    stmt.setObject(1, entityId);
+    try (ResultSet rs = stmt.executeQuery()) {
+      if (rs.next()) {
+        StatusOr<Entity> entityOr = extractEntity(rs);
+        if (entityOr.isNotOk()) {
+          return StatusOr.ofStatus(entityOr.getStatus());
+        }
+        return StatusOr.ofValue(Optional.of(entityOr.getValue()));
       }
-      
-      // Process the result
+      return StatusOr.ofValue(Optional.empty());
     }
-    ```
-- **Error Handling**:
-  - Use detailed error logging internally, but return generic error messages to clients
-  - Log specific error details with `Logger.error()` including exception information
-  - Return standardized generic error messages to clients to avoid information leakage
-  - For internal errors (SQLException, general exceptions), always use the message "Unexpected error while processing request."
-  - For validation errors (missing required fields, format issues), use specific but non-revealing messages
-  - Example implementation pattern:
-    ```java
-    try {
-      // Database operation
-    } catch (SQLException e) {
-      // Log detailed error information for troubleshooting
-      Logger.error(e, "Database error during operation: {}", e.getMessage());
-      // Return generic error message to client
-      responseObserver.onError(io.grpc.Status.INTERNAL
-          .withDescription("Unexpected error while processing request.")
-          .asRuntimeException());
-    } catch (Exception e) {
-      // Log the unexpected exception details
-      Logger.error(e, "Unexpected error during operation: {}", e.getMessage());
-      // Same generic error message to client
-      responseObserver.onError(io.grpc.Status.INTERNAL
-          .withDescription("Unexpected error while processing request.")
-          .asRuntimeException());
-    }
-    ```
+  } catch (SQLException e) {
+    return StatusOr.ofException(e);
+  }
+}
+```
+
+#### Protocol Buffer Conventions
+
 - **UUID Handling**:
   - Protocol buffer definitions use binary UUIDs (`bytes`) for better performance
   - REST API uses hex string representation with standard UUID formatting (8-4-4-4-12)
