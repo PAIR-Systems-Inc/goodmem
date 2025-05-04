@@ -6,6 +6,7 @@ option go_package = "github.com/pairsys/goodmem/cli/gen/goodmem/v1";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
+import "goodmem/v1/common.proto";
 
 // Represents an API key for authenticating requests.
 message ApiKey {
@@ -67,9 +68,22 @@ message ListApiKeysResponse {
 
 message UpdateApiKeyRequest {
   bytes api_key_id = 1; // Required: ID of the key to update (16 bytes UUID)
-  // Optional fields to update. Use field masks for partial updates.
-  map<string, string> labels = 2;
-  Status status = 3;
+
+  // Optional fields to update.
+  optional Status status = 3;
+
+  // Use a oneof containing fields of the WRAPPER message type.
+  // This achieves mutual exclusion while complying with proto3 rules.
+  oneof label_update_strategy {
+    // If 'replace_labels' is the field set in the oneof, it signifies
+    // the intent to replace all existing labels with this set.
+    StringMap replace_labels = 2;
+
+    // If 'merge_labels' is the field set in the oneof, it signifies
+    // the intent to merge these labels with existing ones.
+    StringMap merge_labels = 4;
+  }
+
   // updated_by_id derived from auth context.
 }
 

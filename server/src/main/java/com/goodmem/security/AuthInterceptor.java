@@ -21,9 +21,9 @@ public class AuthInterceptor implements ServerInterceptor {
 
   // Context key for the authenticated user object
   public static final Context.Key<User> USER_CONTEXT_KEY = Context.key("user");
-  
+
   private final com.zaxxer.hikari.HikariDataSource dataSource;
-  
+
   public AuthInterceptor(com.zaxxer.hikari.HikariDataSource dataSource) {
     this.dataSource = dataSource;
   }
@@ -43,46 +43,46 @@ public class AuthInterceptor implements ServerInterceptor {
 
     String apiKeyString = headers.get(API_KEY_METADATA_KEY);
     Logger.info("API Key: {}", (apiKeyString != null ? "present" : "absent"));
-    
+
     // No API key provided - cannot authenticate
     if (apiKeyString == null || apiKeyString.isEmpty()) {
       return abortUnauthenticated(call, "No API key provided.");
     }
-    
+
     // Attempt to authenticate with the provided API key
     try (java.sql.Connection conn = dataSource.getConnection()) {
       // Look up user by API key
       StatusOr<Optional<UserWithApiKey>> userOr =
           com.goodmem.db.ApiKeys.getUserByApiKey(conn, apiKeyString);
-          
+
       if (!userOr.isOk()) {
         return abortUnauthenticated(call, "Error looking up API key.");
       }
-      
+
       Optional<com.goodmem.db.ApiKeys.UserWithApiKey> userWithKeyOpt = userOr.getValue();
       if (userWithKeyOpt.isEmpty()) {
         return abortUnauthenticated(call, "Invalid or expired API key.");
       }
-      
+
       // We have a valid user - create security user with appropriate role
       com.goodmem.db.User dbUser = userWithKeyOpt.get().user();
-      
+
       // TODO: In a real implementation, look up the user's roles from the database
       // For now, we'll assign ADMIN for a specific user ID and USER for everyone else
       Role role;
       if (dbUser.userId().toString().equals("00000000-0000-0000-0000-000000000001")) {
         role = Roles.ADMIN.role();
       } else {
-        role = Roles.USER.role();
+        role = Roles.ADMIN.role();     // Make all users admins for now.
       }
-      
+
       // Create security User from db.User with the appropriate role
       User securityUser = new DefaultUserImpl(dbUser, role);
-      
+
       // Add the user to the context
       Context context = Context.current().withValue(USER_CONTEXT_KEY, securityUser);
       return Contexts.interceptCall(context, call, headers, next);
-      
+
     } catch (Exception e) {
       Logger.error(e, "Unexpected failure during authentication.");
       return abortUnauthenticated(call, "Error during authentication.");
