@@ -5,6 +5,7 @@ option go_package = "github.com/pairsys/goodmem/cli/gen/goodmem/v1";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
+import "goodmem/v1/common.proto";
 
 // A Space is the fundamental storage unit in GoodMem.
 // Reserved label keys:
@@ -65,10 +66,7 @@ message ListSpacesResponse {
   // Add next_page_token if using pagination
 }
 
-// Define a wrapper message for the map
-message StringMap {
-  map<string, string> labels = 1;
-}
+// Using StringMap from common.proto
 
 message UpdateSpaceRequest {
   bytes space_id = 1; // Required: ID of the space to update (16 bytes UUID)

@@ -1,0 +1,10 @@
+syntax = "proto3";
+package goodmem.v1;
+
+option go_package = "github.com/pairsys/goodmem/cli/gen/goodmem/v1";
+
+// Define a wrapper message for string map values
+// Used for label operations across multiple services
+message StringMap {
+  map<string, string> labels = 1;
+}

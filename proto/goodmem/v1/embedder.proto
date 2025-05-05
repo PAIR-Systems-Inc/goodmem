@@ -1,0 +1,134 @@
+syntax = "proto3";
+package goodmem.v1;
+
+option go_package = "github.com/pairsys/goodmem/cli/gen/goodmem/v1";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "goodmem/v1/common.proto";
+
+// Embedder provider type enum
+enum ProviderType {
+  PROVIDER_TYPE_UNSPECIFIED = 0;
+  PROVIDER_TYPE_OPENAI = 1;     // OpenAI embedding models
+  PROVIDER_TYPE_VLLM = 2;       // vLLM-compatible embedding models
+  PROVIDER_TYPE_TEI = 3;        // Tensor Engine Interface models
+}
+
+// Modality type enum
+enum Modality {
+  MODALITY_UNSPECIFIED = 0;
+  MODALITY_TEXT = 1;      // Text content
+  MODALITY_IMAGE = 2;     // Image content
+  MODALITY_AUDIO = 3;     // Audio content
+  MODALITY_VIDEO = 4;     // Video content
+}
+
+// An Embedder represents a connection to an embedding API service
+message Embedder {
+  bytes embedder_id = 1;                      // UUID (16 bytes)
+  string display_name = 2;                    // User-facing name
+  string description = 3;                     // Optional description
+  ProviderType provider_type = 4;             // Provider type (OPENAI, VLLM, TEI)
+  string endpoint_url = 5;                    // API endpoint URL
+  string api_path = 6;                        // API path for embeddings request
+  string model_identifier = 7;                // Model identifier (e.g., text-embedding-3-small)
+  int32 dimensionality = 8;                   // Output vector dimensions
+  optional int32 max_sequence_length = 9;     // Maximum input sequence length
+  repeated Modality supported_modalities = 10; // Supported modalities (TEXT, IMAGE, etc.)
+  string credentials = 11;                    // API credentials (will be encrypted)
+  map<string, string> labels = 12;            // User-defined labels
+  string version = 13;                        // Optional version information
+  string monitoring_endpoint = 14;            // Optional monitoring endpoint
+  bytes owner_id = 15;                        // User UUID (16 bytes)
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp updated_at = 17;
+  bytes created_by_id = 18;                   // User UUID (16 bytes)
+  bytes updated_by_id = 19;                   // User UUID (16 bytes)
+}
+
+// Service for managing Embedders
+service EmbedderService {
+  // Creates a new Embedder. Owner/creator derived from auth context.
+  rpc CreateEmbedder(CreateEmbedderRequest) returns (Embedder);
+  
+  // Retrieves details of a specific Embedder.
+  rpc GetEmbedder(GetEmbedderRequest) returns (Embedder);
+  
+  // Lists Embedders accessible to the caller (filtered by owner, provider type, etc.)
+  rpc ListEmbedders(ListEmbeddersRequest) returns (ListEmbeddersResponse);
+  
+  // Updates mutable properties of an Embedder
+  rpc UpdateEmbedder(UpdateEmbedderRequest) returns (Embedder);
+  
+  // Deletes an Embedder
+  rpc DeleteEmbedder(DeleteEmbedderRequest) returns (google.protobuf.Empty);
+}
+
+message CreateEmbedderRequest {
+  string display_name = 1;                    // Required: User-facing name
+  string description = 2;                     // Optional description
+  ProviderType provider_type = 3;             // Required: Provider type
+  string endpoint_url = 4;                    // Required: API endpoint URL
+  string api_path = 5;                        // API path (defaults to /v1/embeddings)
+  string model_identifier = 6;                // Required: Model identifier
+  int32 dimensionality = 7;                   // Required: Output vector dimensions
+  optional int32 max_sequence_length = 8;     // Optional max input sequence length
+  repeated Modality supported_modalities = 9; // Optional supported modalities (default TEXT)
+  string credentials = 10;                    // Required: API credentials
+  map<string, string> labels = 11;            // Optional labels
+  string version = 12;                        // Optional version information
+  string monitoring_endpoint = 13;            // Optional monitoring endpoint
+  optional bytes owner_id = 14;               // Optional: if not provided, derived from auth context
+                                              // If provided, requires CREATE_EMBEDDER_ANY permission
+  // created_by_id always derived from auth context
+}
+
+message GetEmbedderRequest {
+  bytes embedder_id = 1;                      // UUID (16 bytes)
+}
+
+message ListEmbeddersRequest {
+  // Optional filters
+  optional bytes owner_id = 1;                // Filter by owner (16 bytes UUID)
+  optional ProviderType provider_type = 2;    // Filter by provider type
+  map<string, string> label_selectors = 3;    // Partial match on labels
+  // Add pagination fields if needed (page_size, page_token)
+}
+
+message ListEmbeddersResponse {
+  repeated Embedder embedders = 1;
+  // Add next_page_token if using pagination
+}
+
+// Using StringMap from common.proto
+
+message UpdateEmbedderRequest {
+  bytes embedder_id = 1;                      // Required: ID of the embedder to update
+  
+  // Optional fields to update
+  optional string display_name = 2;           // Update display name
+  optional string description = 3;            // Update description
+  optional string endpoint_url = 4;           // Update endpoint URL
+  optional string api_path = 5;               // Update API path
+  optional string model_identifier = 6;       // Update model identifier
+  optional int32 dimensionality = 7;          // Update dimensionality
+  optional int32 max_sequence_length = 8;     // Update max sequence length
+  repeated Modality supported_modalities = 9; // Update supported modalities (empty means no change)
+  optional string credentials = 10;           // Update credentials
+  optional string version = 11;               // Update version
+  optional string monitoring_endpoint = 12;   // Update monitoring endpoint
+  
+  // Use a oneof for label update strategy (similar to Space)
+  oneof label_update_strategy {
+    StringMap replace_labels = 13;            // Replace all existing labels
+    StringMap merge_labels = 14;              // Merge with existing labels
+  }
+  
+  // provider_type is immutable after creation
+  // updated_by_id derived from auth context
+}
+
+message DeleteEmbedderRequest {
+  bytes embedder_id = 1;                      // UUID (16 bytes)
+}
