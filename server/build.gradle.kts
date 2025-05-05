@@ -46,9 +46,9 @@ dependencies {
     // Testing
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
-    testImplementation("org.testcontainers:testcontainers:1.20.0")
-    testImplementation("org.testcontainers:junit-jupiter:1.20.0")
-    testImplementation("org.testcontainers:postgresql:1.20.0")
+    testImplementation("org.testcontainers:testcontainers:1.21.0")
+    testImplementation("org.testcontainers:junit-jupiter:1.21.0")
+    testImplementation("org.testcontainers:postgresql:1.21.0")
     testImplementation("org.mockito:mockito-core:5.8.0")
     testImplementation("org.mockito:mockito-junit-jupiter:5.8.0")
 }
