@@ -151,7 +151,7 @@ type CreateSpaceRequest struct {
 	Labels         map[string]string      `protobuf:"bytes,2,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	EmbeddingModel string                 `protobuf:"bytes,3,opt,name=embedding_model,json=embeddingModel,proto3" json:"embedding_model,omitempty"`
 	PublicRead     bool                   `protobuf:"varint,4,opt,name=public_read,json=publicRead,proto3" json:"public_read,omitempty"`
-	OwnerId        []byte                 `protobuf:"bytes,5,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"` // Optional: if not provided, derived from auth context. If provided, requires CREATE_SPACE_ANY permission.
+	OwnerId        []byte                 `protobuf:"bytes,5,opt,name=owner_id,json=ownerId,proto3,oneof" json:"owner_id,omitempty"` // Optional: if not provided, derived from auth context. If provided, requires CREATE_SPACE_ANY permission.
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -268,12 +268,19 @@ func (x *GetSpaceRequest) GetSpaceId() []byte {
 type ListSpacesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Optional filters
-	OwnerId []byte `protobuf:"bytes,1,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"` // Filter by owner (16 bytes UUID) (if admin or for user's own spaces)
+	OwnerId []byte `protobuf:"bytes,1,opt,name=owner_id,json=ownerId,proto3,oneof" json:"owner_id,omitempty"` // Filter by owner (UUID)
 	// label_selectors is a partial match: all listed pairs must be present
 	// in a Space's labels map for it to be returned.
 	LabelSelectors map[string]string `protobuf:"bytes,2,rep,name=label_selectors,json=labelSelectors,proto3" json:"label_selectors,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Partial match on labels
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	NameFilter     *string           `protobuf:"bytes,3,opt,name=name_filter,json=nameFilter,proto3,oneof" json:"name_filter,omitempty"`                                                                                 // Glob-style match on space name
+	// Pagination
+	MaxResults *int32  `protobuf:"varint,4,opt,name=max_results,json=maxResults,proto3,oneof" json:"max_results,omitempty"` // Max results to return
+	NextToken  *string `protobuf:"bytes,5,opt,name=next_token,json=nextToken,proto3,oneof" json:"next_token,omitempty"`     // Opaque token for the next page
+	// Sorting
+	SortBy        *string    `protobuf:"bytes,6,opt,name=sort_by,json=sortBy,proto3,oneof" json:"sort_by,omitempty"`                                     // e.g., "created_time", "name"
+	SortOrder     *SortOrder `protobuf:"varint,7,opt,name=sort_order,json=sortOrder,proto3,enum=goodmem.v1.SortOrder,oneof" json:"sort_order,omitempty"` // ASCENDING or DESCENDING
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListSpacesRequest) Reset() {
@@ -320,9 +327,45 @@ func (x *ListSpacesRequest) GetLabelSelectors() map[string]string {
 	return nil
 }
 
+func (x *ListSpacesRequest) GetNameFilter() string {
+	if x != nil && x.NameFilter != nil {
+		return *x.NameFilter
+	}
+	return ""
+}
+
+func (x *ListSpacesRequest) GetMaxResults() int32 {
+	if x != nil && x.MaxResults != nil {
+		return *x.MaxResults
+	}
+	return 0
+}
+
+func (x *ListSpacesRequest) GetNextToken() string {
+	if x != nil && x.NextToken != nil {
+		return *x.NextToken
+	}
+	return ""
+}
+
+func (x *ListSpacesRequest) GetSortBy() string {
+	if x != nil && x.SortBy != nil {
+		return *x.SortBy
+	}
+	return ""
+}
+
+func (x *ListSpacesRequest) GetSortOrder() SortOrder {
+	if x != nil && x.SortOrder != nil {
+		return *x.SortOrder
+	}
+	return SortOrder_SORT_ORDER_UNSPECIFIED
+}
+
 type ListSpacesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Spaces        []*Space               `protobuf:"bytes,1,rep,name=spaces,proto3" json:"spaces,omitempty"` // Add next_page_token if using pagination
+	Spaces        []*Space               `protobuf:"bytes,1,rep,name=spaces,proto3" json:"spaces,omitempty"`                        // Page of results
+	NextToken     string                 `protobuf:"bytes,2,opt,name=next_token,json=nextToken,proto3" json:"next_token,omitempty"` // Token for next page (or empty)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -364,20 +407,127 @@ func (x *ListSpacesResponse) GetSpaces() []*Space {
 	return nil
 }
 
+func (x *ListSpacesResponse) GetNextToken() string {
+	if x != nil {
+		return x.NextToken
+	}
+	return ""
+}
+
+// Internal serialization of this message produces the next_token
+type ListSpacesNextPageToken struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Start          int32                  `protobuf:"varint,10,opt,name=start,proto3" json:"start,omitempty"` // Cursor position
+	OwnerId        []byte                 `protobuf:"bytes,20,opt,name=owner_id,json=ownerId,proto3,oneof" json:"owner_id,omitempty"`
+	LabelSelectors map[string]string      `protobuf:"bytes,30,rep,name=label_selectors,json=labelSelectors,proto3" json:"label_selectors,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	NameFilter     *string                `protobuf:"bytes,40,opt,name=name_filter,json=nameFilter,proto3,oneof" json:"name_filter,omitempty"`
+	RequestorId    []byte                 `protobuf:"bytes,50,opt,name=requestor_id,json=requestorId,proto3,oneof" json:"requestor_id,omitempty"` // Authenticated user for validation
+	SortBy         *string                `protobuf:"bytes,60,opt,name=sort_by,json=sortBy,proto3,oneof" json:"sort_by,omitempty"`
+	SortOrder      *SortOrder             `protobuf:"varint,70,opt,name=sort_order,json=sortOrder,proto3,enum=goodmem.v1.SortOrder,oneof" json:"sort_order,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ListSpacesNextPageToken) Reset() {
+	*x = ListSpacesNextPageToken{}
+	mi := &file_goodmem_v1_space_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSpacesNextPageToken) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSpacesNextPageToken) ProtoMessage() {}
+
+func (x *ListSpacesNextPageToken) ProtoReflect() protoreflect.Message {
+	mi := &file_goodmem_v1_space_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSpacesNextPageToken.ProtoReflect.Descriptor instead.
+func (*ListSpacesNextPageToken) Descriptor() ([]byte, []int) {
+	return file_goodmem_v1_space_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ListSpacesNextPageToken) GetStart() int32 {
+	if x != nil {
+		return x.Start
+	}
+	return 0
+}
+
+func (x *ListSpacesNextPageToken) GetOwnerId() []byte {
+	if x != nil {
+		return x.OwnerId
+	}
+	return nil
+}
+
+func (x *ListSpacesNextPageToken) GetLabelSelectors() map[string]string {
+	if x != nil {
+		return x.LabelSelectors
+	}
+	return nil
+}
+
+func (x *ListSpacesNextPageToken) GetNameFilter() string {
+	if x != nil && x.NameFilter != nil {
+		return *x.NameFilter
+	}
+	return ""
+}
+
+func (x *ListSpacesNextPageToken) GetRequestorId() []byte {
+	if x != nil {
+		return x.RequestorId
+	}
+	return nil
+}
+
+func (x *ListSpacesNextPageToken) GetSortBy() string {
+	if x != nil && x.SortBy != nil {
+		return *x.SortBy
+	}
+	return ""
+}
+
+func (x *ListSpacesNextPageToken) GetSortOrder() SortOrder {
+	if x != nil && x.SortOrder != nil {
+		return *x.SortOrder
+	}
+	return SortOrder_SORT_ORDER_UNSPECIFIED
+}
+
 type UpdateSpaceRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	SpaceId []byte                 `protobuf:"bytes,1,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"` // Required: ID of the space to update (16 bytes UUID)
-	// Optional fields to update. Use field masks for partial updates.
-	Name          string            `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Labels        map[string]string `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	PublicRead    bool              `protobuf:"varint,4,opt,name=public_read,json=publicRead,proto3" json:"public_read,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Optional fields to update.
+	Name       *string `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	PublicRead *bool   `protobuf:"varint,4,opt,name=public_read,json=publicRead,proto3,oneof" json:"public_read,omitempty"`
+	// Use a oneof containing fields of the WRAPPER message type.
+	// This achieves mutual exclusion while complying with proto3 rules.
+	//
+	// Types that are valid to be assigned to LabelUpdateStrategy:
+	//
+	//	*UpdateSpaceRequest_ReplaceLabels
+	//	*UpdateSpaceRequest_MergeLabels
+	LabelUpdateStrategy isUpdateSpaceRequest_LabelUpdateStrategy `protobuf_oneof:"label_update_strategy"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *UpdateSpaceRequest) Reset() {
 	*x = UpdateSpaceRequest{}
-	mi := &file_goodmem_v1_space_proto_msgTypes[5]
+	mi := &file_goodmem_v1_space_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -389,7 +539,7 @@ func (x *UpdateSpaceRequest) String() string {
 func (*UpdateSpaceRequest) ProtoMessage() {}
 
 func (x *UpdateSpaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goodmem_v1_space_proto_msgTypes[5]
+	mi := &file_goodmem_v1_space_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -402,7 +552,7 @@ func (x *UpdateSpaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSpaceRequest.ProtoReflect.Descriptor instead.
 func (*UpdateSpaceRequest) Descriptor() ([]byte, []int) {
-	return file_goodmem_v1_space_proto_rawDescGZIP(), []int{5}
+	return file_goodmem_v1_space_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *UpdateSpaceRequest) GetSpaceId() []byte {
@@ -413,25 +563,63 @@ func (x *UpdateSpaceRequest) GetSpaceId() []byte {
 }
 
 func (x *UpdateSpaceRequest) GetName() string {
-	if x != nil {
-		return x.Name
+	if x != nil && x.Name != nil {
+		return *x.Name
 	}
 	return ""
 }
 
-func (x *UpdateSpaceRequest) GetLabels() map[string]string {
+func (x *UpdateSpaceRequest) GetPublicRead() bool {
+	if x != nil && x.PublicRead != nil {
+		return *x.PublicRead
+	}
+	return false
+}
+
+func (x *UpdateSpaceRequest) GetLabelUpdateStrategy() isUpdateSpaceRequest_LabelUpdateStrategy {
 	if x != nil {
-		return x.Labels
+		return x.LabelUpdateStrategy
 	}
 	return nil
 }
 
-func (x *UpdateSpaceRequest) GetPublicRead() bool {
+func (x *UpdateSpaceRequest) GetReplaceLabels() *StringMap {
 	if x != nil {
-		return x.PublicRead
+		if x, ok := x.LabelUpdateStrategy.(*UpdateSpaceRequest_ReplaceLabels); ok {
+			return x.ReplaceLabels
+		}
 	}
-	return false
+	return nil
 }
+
+func (x *UpdateSpaceRequest) GetMergeLabels() *StringMap {
+	if x != nil {
+		if x, ok := x.LabelUpdateStrategy.(*UpdateSpaceRequest_MergeLabels); ok {
+			return x.MergeLabels
+		}
+	}
+	return nil
+}
+
+type isUpdateSpaceRequest_LabelUpdateStrategy interface {
+	isUpdateSpaceRequest_LabelUpdateStrategy()
+}
+
+type UpdateSpaceRequest_ReplaceLabels struct {
+	// If 'replace_labels' is the field set in the oneof, it signifies
+	// the intent to replace all existing labels with this set.
+	ReplaceLabels *StringMap `protobuf:"bytes,3,opt,name=replace_labels,json=replaceLabels,proto3,oneof"`
+}
+
+type UpdateSpaceRequest_MergeLabels struct {
+	// If 'merge_labels' is the field set in the oneof, it signifies
+	// the intent to merge these labels with existing ones.
+	MergeLabels *StringMap `protobuf:"bytes,5,opt,name=merge_labels,json=mergeLabels,proto3,oneof"`
+}
+
+func (*UpdateSpaceRequest_ReplaceLabels) isUpdateSpaceRequest_LabelUpdateStrategy() {}
+
+func (*UpdateSpaceRequest_MergeLabels) isUpdateSpaceRequest_LabelUpdateStrategy() {}
 
 type DeleteSpaceRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -442,7 +630,7 @@ type DeleteSpaceRequest struct {
 
 func (x *DeleteSpaceRequest) Reset() {
 	*x = DeleteSpaceRequest{}
-	mi := &file_goodmem_v1_space_proto_msgTypes[6]
+	mi := &file_goodmem_v1_space_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -454,7 +642,7 @@ func (x *DeleteSpaceRequest) String() string {
 func (*DeleteSpaceRequest) ProtoMessage() {}
 
 func (x *DeleteSpaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goodmem_v1_space_proto_msgTypes[6]
+	mi := &file_goodmem_v1_space_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -467,7 +655,7 @@ func (x *DeleteSpaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSpaceRequest.ProtoReflect.Descriptor instead.
 func (*DeleteSpaceRequest) Descriptor() ([]byte, []int) {
-	return file_goodmem_v1_space_proto_rawDescGZIP(), []int{6}
+	return file_goodmem_v1_space_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *DeleteSpaceRequest) GetSpaceId() []byte {
@@ -482,7 +670,7 @@ var File_goodmem_v1_space_proto protoreflect.FileDescriptor
 const file_goodmem_v1_space_proto_rawDesc = "" +
 	"\n" +
 	"\x16goodmem/v1/space.proto\x12\n" +
-	"goodmem.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcb\x03\n" +
+	"goodmem.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17goodmem/v1/common.proto\"\xcb\x03\n" +
 	"\x05Space\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\fR\aspaceId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x125\n" +
@@ -500,36 +688,76 @@ const file_goodmem_v1_space_proto_rawDesc = "" +
 	" \x01(\fR\vupdatedById\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8c\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9e\x02\n" +
 	"\x12CreateSpaceRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12B\n" +
 	"\x06labels\x18\x02 \x03(\v2*.goodmem.v1.CreateSpaceRequest.LabelsEntryR\x06labels\x12'\n" +
 	"\x0fembedding_model\x18\x03 \x01(\tR\x0eembeddingModel\x12\x1f\n" +
 	"\vpublic_read\x18\x04 \x01(\bR\n" +
-	"publicRead\x12\x19\n" +
-	"\bowner_id\x18\x05 \x01(\fR\aownerId\x1a9\n" +
+	"publicRead\x12\x1e\n" +
+	"\bowner_id\x18\x05 \x01(\fH\x00R\aownerId\x88\x01\x01\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\",\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\v\n" +
+	"\t_owner_id\",\n" +
 	"\x0fGetSpaceRequest\x12\x19\n" +
-	"\bspace_id\x18\x01 \x01(\fR\aspaceId\"\xcd\x01\n" +
-	"\x11ListSpacesRequest\x12\x19\n" +
-	"\bowner_id\x18\x01 \x01(\fR\aownerId\x12Z\n" +
-	"\x0flabel_selectors\x18\x02 \x03(\v21.goodmem.v1.ListSpacesRequest.LabelSelectorsEntryR\x0elabelSelectors\x1aA\n" +
+	"\bspace_id\x18\x01 \x01(\fR\aspaceId\"\xf2\x03\n" +
+	"\x11ListSpacesRequest\x12\x1e\n" +
+	"\bowner_id\x18\x01 \x01(\fH\x00R\aownerId\x88\x01\x01\x12Z\n" +
+	"\x0flabel_selectors\x18\x02 \x03(\v21.goodmem.v1.ListSpacesRequest.LabelSelectorsEntryR\x0elabelSelectors\x12$\n" +
+	"\vname_filter\x18\x03 \x01(\tH\x01R\n" +
+	"nameFilter\x88\x01\x01\x12$\n" +
+	"\vmax_results\x18\x04 \x01(\x05H\x02R\n" +
+	"maxResults\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"next_token\x18\x05 \x01(\tH\x03R\tnextToken\x88\x01\x01\x12\x1c\n" +
+	"\asort_by\x18\x06 \x01(\tH\x04R\x06sortBy\x88\x01\x01\x129\n" +
+	"\n" +
+	"sort_order\x18\a \x01(\x0e2\x15.goodmem.v1.SortOrderH\x05R\tsortOrder\x88\x01\x01\x1aA\n" +
 	"\x13LabelSelectorsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"?\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\v\n" +
+	"\t_owner_idB\x0e\n" +
+	"\f_name_filterB\x0e\n" +
+	"\f_max_resultsB\r\n" +
+	"\v_next_tokenB\n" +
+	"\n" +
+	"\b_sort_byB\r\n" +
+	"\v_sort_order\"^\n" +
 	"\x12ListSpacesResponse\x12)\n" +
-	"\x06spaces\x18\x01 \x03(\v2\x11.goodmem.v1.SpaceR\x06spaces\"\xe3\x01\n" +
-	"\x12UpdateSpaceRequest\x12\x19\n" +
-	"\bspace_id\x18\x01 \x01(\fR\aspaceId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12B\n" +
-	"\x06labels\x18\x03 \x03(\v2*.goodmem.v1.UpdateSpaceRequest.LabelsEntryR\x06labels\x12\x1f\n" +
-	"\vpublic_read\x18\x04 \x01(\bR\n" +
-	"publicRead\x1a9\n" +
-	"\vLabelsEntry\x12\x10\n" +
+	"\x06spaces\x18\x01 \x03(\v2\x11.goodmem.v1.SpaceR\x06spaces\x12\x1d\n" +
+	"\n" +
+	"next_token\x18\x02 \x01(\tR\tnextToken\"\xe4\x03\n" +
+	"\x17ListSpacesNextPageToken\x12\x14\n" +
+	"\x05start\x18\n" +
+	" \x01(\x05R\x05start\x12\x1e\n" +
+	"\bowner_id\x18\x14 \x01(\fH\x00R\aownerId\x88\x01\x01\x12`\n" +
+	"\x0flabel_selectors\x18\x1e \x03(\v27.goodmem.v1.ListSpacesNextPageToken.LabelSelectorsEntryR\x0elabelSelectors\x12$\n" +
+	"\vname_filter\x18( \x01(\tH\x01R\n" +
+	"nameFilter\x88\x01\x01\x12&\n" +
+	"\frequestor_id\x182 \x01(\fH\x02R\vrequestorId\x88\x01\x01\x12\x1c\n" +
+	"\asort_by\x18< \x01(\tH\x03R\x06sortBy\x88\x01\x01\x129\n" +
+	"\n" +
+	"sort_order\x18F \x01(\x0e2\x15.goodmem.v1.SortOrderH\x04R\tsortOrder\x88\x01\x01\x1aA\n" +
+	"\x13LabelSelectorsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"/\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\v\n" +
+	"\t_owner_idB\x0e\n" +
+	"\f_name_filterB\x0f\n" +
+	"\r_requestor_idB\n" +
+	"\n" +
+	"\b_sort_byB\r\n" +
+	"\v_sort_order\"\x9c\x02\n" +
+	"\x12UpdateSpaceRequest\x12\x19\n" +
+	"\bspace_id\x18\x01 \x01(\fR\aspaceId\x12\x17\n" +
+	"\x04name\x18\x02 \x01(\tH\x01R\x04name\x88\x01\x01\x12$\n" +
+	"\vpublic_read\x18\x04 \x01(\bH\x02R\n" +
+	"publicRead\x88\x01\x01\x12>\n" +
+	"\x0ereplace_labels\x18\x03 \x01(\v2\x15.goodmem.v1.StringMapH\x00R\rreplaceLabels\x12:\n" +
+	"\fmerge_labels\x18\x05 \x01(\v2\x15.goodmem.v1.StringMapH\x00R\vmergeLabelsB\x17\n" +
+	"\x15label_update_strategyB\a\n" +
+	"\x05_nameB\x0e\n" +
+	"\f_public_read\"/\n" +
 	"\x12DeleteSpaceRequest\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\fR\aspaceId2\xe2\x02\n" +
 	"\fSpaceService\x12@\n" +
@@ -552,45 +780,52 @@ func file_goodmem_v1_space_proto_rawDescGZIP() []byte {
 	return file_goodmem_v1_space_proto_rawDescData
 }
 
-var file_goodmem_v1_space_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_goodmem_v1_space_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_goodmem_v1_space_proto_goTypes = []any{
-	(*Space)(nil),                 // 0: goodmem.v1.Space
-	(*CreateSpaceRequest)(nil),    // 1: goodmem.v1.CreateSpaceRequest
-	(*GetSpaceRequest)(nil),       // 2: goodmem.v1.GetSpaceRequest
-	(*ListSpacesRequest)(nil),     // 3: goodmem.v1.ListSpacesRequest
-	(*ListSpacesResponse)(nil),    // 4: goodmem.v1.ListSpacesResponse
-	(*UpdateSpaceRequest)(nil),    // 5: goodmem.v1.UpdateSpaceRequest
-	(*DeleteSpaceRequest)(nil),    // 6: goodmem.v1.DeleteSpaceRequest
-	nil,                           // 7: goodmem.v1.Space.LabelsEntry
-	nil,                           // 8: goodmem.v1.CreateSpaceRequest.LabelsEntry
-	nil,                           // 9: goodmem.v1.ListSpacesRequest.LabelSelectorsEntry
-	nil,                           // 10: goodmem.v1.UpdateSpaceRequest.LabelsEntry
-	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),         // 12: google.protobuf.Empty
+	(*Space)(nil),                   // 0: goodmem.v1.Space
+	(*CreateSpaceRequest)(nil),      // 1: goodmem.v1.CreateSpaceRequest
+	(*GetSpaceRequest)(nil),         // 2: goodmem.v1.GetSpaceRequest
+	(*ListSpacesRequest)(nil),       // 3: goodmem.v1.ListSpacesRequest
+	(*ListSpacesResponse)(nil),      // 4: goodmem.v1.ListSpacesResponse
+	(*ListSpacesNextPageToken)(nil), // 5: goodmem.v1.ListSpacesNextPageToken
+	(*UpdateSpaceRequest)(nil),      // 6: goodmem.v1.UpdateSpaceRequest
+	(*DeleteSpaceRequest)(nil),      // 7: goodmem.v1.DeleteSpaceRequest
+	nil,                             // 8: goodmem.v1.Space.LabelsEntry
+	nil,                             // 9: goodmem.v1.CreateSpaceRequest.LabelsEntry
+	nil,                             // 10: goodmem.v1.ListSpacesRequest.LabelSelectorsEntry
+	nil,                             // 11: goodmem.v1.ListSpacesNextPageToken.LabelSelectorsEntry
+	(*timestamppb.Timestamp)(nil),   // 12: google.protobuf.Timestamp
+	(SortOrder)(0),                  // 13: goodmem.v1.SortOrder
+	(*StringMap)(nil),               // 14: goodmem.v1.StringMap
+	(*emptypb.Empty)(nil),           // 15: google.protobuf.Empty
 }
 var file_goodmem_v1_space_proto_depIdxs = []int32{
-	7,  // 0: goodmem.v1.Space.labels:type_name -> goodmem.v1.Space.LabelsEntry
-	11, // 1: goodmem.v1.Space.created_at:type_name -> google.protobuf.Timestamp
-	11, // 2: goodmem.v1.Space.updated_at:type_name -> google.protobuf.Timestamp
-	8,  // 3: goodmem.v1.CreateSpaceRequest.labels:type_name -> goodmem.v1.CreateSpaceRequest.LabelsEntry
-	9,  // 4: goodmem.v1.ListSpacesRequest.label_selectors:type_name -> goodmem.v1.ListSpacesRequest.LabelSelectorsEntry
-	0,  // 5: goodmem.v1.ListSpacesResponse.spaces:type_name -> goodmem.v1.Space
-	10, // 6: goodmem.v1.UpdateSpaceRequest.labels:type_name -> goodmem.v1.UpdateSpaceRequest.LabelsEntry
-	1,  // 7: goodmem.v1.SpaceService.CreateSpace:input_type -> goodmem.v1.CreateSpaceRequest
-	2,  // 8: goodmem.v1.SpaceService.GetSpace:input_type -> goodmem.v1.GetSpaceRequest
-	3,  // 9: goodmem.v1.SpaceService.ListSpaces:input_type -> goodmem.v1.ListSpacesRequest
-	5,  // 10: goodmem.v1.SpaceService.UpdateSpace:input_type -> goodmem.v1.UpdateSpaceRequest
-	6,  // 11: goodmem.v1.SpaceService.DeleteSpace:input_type -> goodmem.v1.DeleteSpaceRequest
-	0,  // 12: goodmem.v1.SpaceService.CreateSpace:output_type -> goodmem.v1.Space
-	0,  // 13: goodmem.v1.SpaceService.GetSpace:output_type -> goodmem.v1.Space
-	4,  // 14: goodmem.v1.SpaceService.ListSpaces:output_type -> goodmem.v1.ListSpacesResponse
-	0,  // 15: goodmem.v1.SpaceService.UpdateSpace:output_type -> goodmem.v1.Space
-	12, // 16: goodmem.v1.SpaceService.DeleteSpace:output_type -> google.protobuf.Empty
-	12, // [12:17] is the sub-list for method output_type
-	7,  // [7:12] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	8,  // 0: goodmem.v1.Space.labels:type_name -> goodmem.v1.Space.LabelsEntry
+	12, // 1: goodmem.v1.Space.created_at:type_name -> google.protobuf.Timestamp
+	12, // 2: goodmem.v1.Space.updated_at:type_name -> google.protobuf.Timestamp
+	9,  // 3: goodmem.v1.CreateSpaceRequest.labels:type_name -> goodmem.v1.CreateSpaceRequest.LabelsEntry
+	10, // 4: goodmem.v1.ListSpacesRequest.label_selectors:type_name -> goodmem.v1.ListSpacesRequest.LabelSelectorsEntry
+	13, // 5: goodmem.v1.ListSpacesRequest.sort_order:type_name -> goodmem.v1.SortOrder
+	0,  // 6: goodmem.v1.ListSpacesResponse.spaces:type_name -> goodmem.v1.Space
+	11, // 7: goodmem.v1.ListSpacesNextPageToken.label_selectors:type_name -> goodmem.v1.ListSpacesNextPageToken.LabelSelectorsEntry
+	13, // 8: goodmem.v1.ListSpacesNextPageToken.sort_order:type_name -> goodmem.v1.SortOrder
+	14, // 9: goodmem.v1.UpdateSpaceRequest.replace_labels:type_name -> goodmem.v1.StringMap
+	14, // 10: goodmem.v1.UpdateSpaceRequest.merge_labels:type_name -> goodmem.v1.StringMap
+	1,  // 11: goodmem.v1.SpaceService.CreateSpace:input_type -> goodmem.v1.CreateSpaceRequest
+	2,  // 12: goodmem.v1.SpaceService.GetSpace:input_type -> goodmem.v1.GetSpaceRequest
+	3,  // 13: goodmem.v1.SpaceService.ListSpaces:input_type -> goodmem.v1.ListSpacesRequest
+	6,  // 14: goodmem.v1.SpaceService.UpdateSpace:input_type -> goodmem.v1.UpdateSpaceRequest
+	7,  // 15: goodmem.v1.SpaceService.DeleteSpace:input_type -> goodmem.v1.DeleteSpaceRequest
+	0,  // 16: goodmem.v1.SpaceService.CreateSpace:output_type -> goodmem.v1.Space
+	0,  // 17: goodmem.v1.SpaceService.GetSpace:output_type -> goodmem.v1.Space
+	4,  // 18: goodmem.v1.SpaceService.ListSpaces:output_type -> goodmem.v1.ListSpacesResponse
+	0,  // 19: goodmem.v1.SpaceService.UpdateSpace:output_type -> goodmem.v1.Space
+	15, // 20: goodmem.v1.SpaceService.DeleteSpace:output_type -> google.protobuf.Empty
+	16, // [16:21] is the sub-list for method output_type
+	11, // [11:16] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_goodmem_v1_space_proto_init() }
@@ -598,13 +833,21 @@ func file_goodmem_v1_space_proto_init() {
 	if File_goodmem_v1_space_proto != nil {
 		return
 	}
+	file_goodmem_v1_common_proto_init()
+	file_goodmem_v1_space_proto_msgTypes[1].OneofWrappers = []any{}
+	file_goodmem_v1_space_proto_msgTypes[3].OneofWrappers = []any{}
+	file_goodmem_v1_space_proto_msgTypes[5].OneofWrappers = []any{}
+	file_goodmem_v1_space_proto_msgTypes[6].OneofWrappers = []any{
+		(*UpdateSpaceRequest_ReplaceLabels)(nil),
+		(*UpdateSpaceRequest_MergeLabels)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goodmem_v1_space_proto_rawDesc), len(file_goodmem_v1_space_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -17,7 +17,7 @@ import goodmem.v1.SpaceOuterClass.CreateSpaceRequest;
 import goodmem.v1.SpaceOuterClass.DeleteSpaceRequest;
 import goodmem.v1.SpaceOuterClass.GetSpaceRequest;
 import goodmem.v1.SpaceOuterClass.Space;
-import goodmem.v1.SpaceOuterClass.StringMap;
+import goodmem.v1.Common.StringMap;
 import goodmem.v1.SpaceOuterClass.UpdateSpaceRequest;
 import goodmem.v1.UserOuterClass;
 import goodmem.v1.UserOuterClass.InitializeSystemRequest;

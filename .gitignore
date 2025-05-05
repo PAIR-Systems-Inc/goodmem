@@ -49,3 +49,4 @@ cli/Dockerfile.protogen
 
 # Tool dependencies
 /.tools/
+**/.claude/settings.local.json

@@ -14,7 +14,7 @@ package com.goodmem.security;
  *   <li>SCOPE: The range of entities affected (e.g., OWN, ANY)
  * </ul>
  *
- * <p>These permissions are used in conjunction with {@link Role} and {@link User} implementations 
+ * <p>These permissions are used in conjunction with {@link Role} and {@link User} implementations
  * to enforce access control throughout the application.
  */
 public enum Permission {
@@ -25,29 +25,66 @@ public enum Permission {
 
   /** Permission for a user to view any user in the system. */
   DISPLAY_USER_ANY,
-  
+
   // Space permissions
   /** Permission for a user to create spaces for themselves. */
   CREATE_SPACE_OWN,
-  
+
   /** Permission for a user to create spaces for any user. */
   CREATE_SPACE_ANY,
-  
+
   /** Permission for a user to view their own spaces. */
   DISPLAY_SPACE_OWN,
-  
+
   /** Permission for a user to view any space in the system. */
   DISPLAY_SPACE_ANY,
-  
+
   /** Permission for a user to update their own spaces. */
   UPDATE_SPACE_OWN,
-  
+
   /** Permission for a user to update any space in the system. */
   UPDATE_SPACE_ANY,
-  
+
   /** Permission for a user to delete their own spaces. */
   DELETE_SPACE_OWN,
-  
+
   /** Permission for a user to delete any space in the system. */
-  DELETE_SPACE_ANY;
+  DELETE_SPACE_ANY,
+
+  /** Permission for a user to list their own spaces. */
+  LIST_SPACE_OWN,
+
+  /** Permission for a user to list any spaces in the system. */
+  LIST_SPACE_ANY,
+
+  // API Key permissions
+  /** Permission for a user to create API keys for their own account. */
+  CREATE_APIKEY_OWN,
+
+  /** Permission for a user to create API keys for any user in the system. */
+  CREATE_APIKEY_ANY,
+
+  /** Permission for a user to view their own API keys. */
+  DISPLAY_APIKEY_OWN,
+
+  /** Permission for a user to view any API key in the system. */
+  DISPLAY_APIKEY_ANY,
+
+  /** Permission for a user to update their own API keys. */
+  UPDATE_APIKEY_OWN,
+
+  /** Permission for a user to update any API key in the system. */
+  UPDATE_APIKEY_ANY,
+
+  /** Permission for a user to delete their own API keys. */
+  DELETE_APIKEY_OWN,
+
+  /** Permission for a user to delete any API key in the system. */
+  DELETE_APIKEY_ANY,
+
+  /** Permission for a user to list their own API keys. */
+  LIST_APIKEY_OWN,
+
+  /** Permission for a user to list any API key in the system. */
+  LIST_APIKEY_ANY;
 }

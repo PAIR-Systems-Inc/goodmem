@@ -35,7 +35,7 @@ import goodmem.v1.SpaceOuterClass.GetSpaceRequest;
 import goodmem.v1.SpaceOuterClass.ListSpacesRequest;
 import goodmem.v1.SpaceOuterClass.ListSpacesResponse;
 import goodmem.v1.SpaceOuterClass.Space;
-import goodmem.v1.SpaceOuterClass.StringMap;
+import goodmem.v1.Common.StringMap;
 import goodmem.v1.SpaceOuterClass.UpdateSpaceRequest;
 import goodmem.v1.SpaceServiceGrpc;
 import goodmem.v1.UserOuterClass.GetUserRequest;
@@ -453,15 +453,6 @@ public class Main {
       requestBuilder.setMergeLabels(labelsBuilder.build());
     }
 
-    // Legacy support for "labels" field - treat as replace_labels
-    if (json.containsKey("labels") && json.get("labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> labels = (Map<String, String>) json.get("labels");
-      StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(labels);
-      requestBuilder.setReplaceLabels(labelsBuilder.build());
-    }
-
     Space response = spaceService.updateSpace(requestBuilder.build());
     ctx.json(protoToMap(response));
   }
@@ -691,11 +682,17 @@ public class Main {
 
     Map<String, Object> json = ctx.bodyAsClass(Map.class);
 
-    // ApiKey uses direct map rather than StringMap wrapper
-    if (json.containsKey("labels") && json.get("labels") instanceof Map) {
+    // Handle label update strategies using StringMap
+    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
       @SuppressWarnings("unchecked")
-      Map<String, String> labels = (Map<String, String>) json.get("labels");
-      requestBuilder.putAllLabels(labels);
+      Map<String, String> labels = (Map<String, String>) json.get("replace_labels");
+      goodmem.v1.Common.StringMap stringMap = goodmem.v1.Common.StringMap.newBuilder().putAllLabels(labels).build();
+      requestBuilder.setReplaceLabels(stringMap);
+    } else if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> labels = (Map<String, String>) json.get("merge_labels");
+      goodmem.v1.Common.StringMap stringMap = goodmem.v1.Common.StringMap.newBuilder().putAllLabels(labels).build();
+      requestBuilder.setMergeLabels(stringMap);
     }
 
     if (json.containsKey("status")) {

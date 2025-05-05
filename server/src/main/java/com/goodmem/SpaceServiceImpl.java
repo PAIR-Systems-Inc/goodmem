@@ -1,24 +1,35 @@
 package com.goodmem;
 
+import com.goodmem.db.util.UuidUtil;
+import com.goodmem.security.AuthInterceptor;
+import com.goodmem.security.Permission;
+import com.goodmem.security.User;
 import com.google.common.io.BaseEncoding;
 import com.google.protobuf.Empty;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Timestamp;
 import com.zaxxer.hikari.HikariDataSource;
+import goodmem.v1.Common.SortOrder;
 import goodmem.v1.SpaceOuterClass.CreateSpaceRequest;
 import goodmem.v1.SpaceOuterClass.DeleteSpaceRequest;
 import goodmem.v1.SpaceOuterClass.GetSpaceRequest;
+import goodmem.v1.SpaceOuterClass.ListSpacesNextPageToken;
 import goodmem.v1.SpaceOuterClass.ListSpacesRequest;
 import goodmem.v1.SpaceOuterClass.ListSpacesResponse;
 import goodmem.v1.SpaceOuterClass.Space;
 import goodmem.v1.SpaceOuterClass.UpdateSpaceRequest;
 import goodmem.v1.SpaceServiceGrpc.SpaceServiceImplBase;
 import io.grpc.stub.StreamObserver;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
 import org.tinylog.Logger;
 
-import java.time.Instant;
-import java.util.UUID;
-
 public class SpaceServiceImpl extends SpaceServiceImplBase {
+  private static final int DEFAULT_MAX_RESULTS = 50;
+  private static final int MAX_RESULTS_LIMIT = 1000;
+  private static final int MIN_RESULTS_LIMIT = 1;
+  
   private final Config config;
 
   /**
@@ -65,7 +76,7 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
     }
 
     // Check permissions based on whether owner_id is specified
-    boolean ownerIdProvided = request.hasOwnerId() && !request.getOwnerId().isEmpty();
+    boolean ownerIdProvided = request.hasOwnerId();
     boolean hasAnyPermission = authenticatedUser.hasPermission(com.goodmem.security.Permission.CREATE_SPACE_ANY);
     boolean hasOwnPermission = authenticatedUser.hasPermission(com.goodmem.security.Permission.CREATE_SPACE_OWN);
     
@@ -369,35 +380,267 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
     }
   }
 
+  /**
+   * Lists spaces based on filters with pagination support.
+   *
+   * <p>The method follows these steps:
+   * 1. Retrieve the authenticated user from context
+   * 2. Check permissions (LIST_SPACE_OWN or LIST_SPACE_ANY)
+   * 3. Process pagination token if provided
+   * 4. Validate and apply filters (owner_id, label_selectors, name_filter)
+   * 5. Query the database with filter and pagination
+   * 6. Generate next page token if needed
+   * 7. Return the list of spaces and pagination token
+   *
+   * <p>Possible error conditions:
+   * - UNAUTHENTICATED: No valid authentication provided
+   * - PERMISSION_DENIED: User lacks necessary permissions to list spaces
+   * - INVALID_ARGUMENT: Invalid filters or pagination token
+   * - INTERNAL: Database or other system errors
+   */
   @Override
   public void listSpaces(
       ListSpacesRequest request, StreamObserver<ListSpacesResponse> responseObserver) {
+    
+    // Get the authenticated user from the Context
+    User authenticatedUser = AuthInterceptor.USER_CONTEXT_KEY.get();
+    if (authenticatedUser == null) {
+      Logger.error("No authentication context found");
+      responseObserver.onError(
+          io.grpc.Status.UNAUTHENTICATED
+              .withDescription("Authentication required")
+              .asRuntimeException());
+      return;
+    }
+    
     Logger.info("Listing spaces with label selectors: {}", request.getLabelSelectorsMap());
-
-    // TODO: Query database with label selectors
-    // TODO: Filter by ownership
-    // TODO: Provide pagination
-
-    // For now, return a dummy space
-    Space dummySpace =
-        Space.newBuilder()
-            .setSpaceId(Uuids.getBytesFromUUID(UUID.randomUUID()))
-            .setName("Example Space")
-            .putLabels("user", "alice")
-            .putLabels("bot", "copilot")
-            .setEmbeddingModel("openai-ada-002")
-            .setCreatedAt(getCurrentTimestamp())
-            .setUpdatedAt(getCurrentTimestamp())
-            .setOwnerId(Uuids.getBytesFromUUID(UUID.randomUUID()))
-            .setCreatedById(Uuids.getBytesFromUUID(UUID.randomUUID()))
-            .setUpdatedById(Uuids.getBytesFromUUID(UUID.randomUUID()))
-            .setPublicRead(true)
-            .build();
-
-    ListSpacesResponse response = ListSpacesResponse.newBuilder().addSpaces(dummySpace).build();
-
-    responseObserver.onNext(response);
-    responseObserver.onCompleted();
+    
+    // Check permissions
+    boolean hasAnyPermission = authenticatedUser.hasPermission(Permission.LIST_SPACE_ANY);
+    boolean hasOwnPermission = authenticatedUser.hasPermission(Permission.LIST_SPACE_OWN);
+    
+    // User must have at least LIST_SPACE_OWN permission
+    if (!hasAnyPermission && !hasOwnPermission) {
+      Logger.error("User lacks necessary permissions to list spaces");
+      responseObserver.onError(
+          io.grpc.Status.PERMISSION_DENIED
+              .withDescription("Permission denied")
+              .asRuntimeException());
+      return;
+    }
+    
+    try {
+      // Variables for the filter parameters
+      UUID requestedOwnerId = null;
+      Map<String, String> labelSelectors = null;
+      String nameFilter = null;
+      String sortBy = null;
+      SortOrder sortOrder = null;
+      int offset = 0;
+      int maxResults = DEFAULT_MAX_RESULTS; // Default if not specified
+      
+      // Handle pagination token if provided
+      if (request.hasNextToken()) {
+        com.goodmem.common.status.StatusOr<ListSpacesNextPageToken> tokenOr = 
+            decodeAndValidateNextPageToken(request.getNextToken(), authenticatedUser);
+        
+        if (tokenOr.isNotOk()) {
+          Logger.error("Invalid pagination token: {}", tokenOr.getStatus().getMessage());
+          responseObserver.onError(
+              io.grpc.Status.INVALID_ARGUMENT
+                  .withDescription("Invalid pagination token")
+                  .asRuntimeException());
+          return;
+        }
+        
+        ListSpacesNextPageToken token = tokenOr.getValue();
+        
+        // Retrieve parameters from the token
+        if (token.hasOwnerId()) {
+          com.goodmem.common.status.StatusOr<UUID> ownerIdOr = 
+              UuidUtil.fromProtoBytes(token.getOwnerId());
+          
+          if (ownerIdOr.isNotOk()) {
+            Logger.error("Invalid owner ID format in token: {}", ownerIdOr.getStatus().getMessage());
+            responseObserver.onError(
+                io.grpc.Status.INVALID_ARGUMENT
+                    .withDescription("Invalid owner ID format in token")
+                    .asRuntimeException());
+            return;
+          }
+          
+          requestedOwnerId = ownerIdOr.getValue();
+        }
+        
+        if (token.getLabelSelectorsCount() > 0) {
+          labelSelectors = token.getLabelSelectorsMap();
+        }
+        
+        if (token.hasNameFilter()) {
+          nameFilter = token.getNameFilter();
+        }
+        
+        offset = token.getStart();
+        
+        if (token.hasSortBy()) {
+          sortBy = token.getSortBy();
+        }
+        
+        if (token.hasSortOrder()) {
+          sortOrder = token.getSortOrder();
+        }
+      } else {
+        // No token, use the request parameters
+        
+        // Max results
+        maxResults = request.hasMaxResults() ? request.getMaxResults() : DEFAULT_MAX_RESULTS;
+        // Clamp max results to valid range
+        maxResults = Math.max(MIN_RESULTS_LIMIT, Math.min(maxResults, MAX_RESULTS_LIMIT));
+        
+        // Owner ID
+        if (request.hasOwnerId()) {
+          com.goodmem.common.status.StatusOr<UUID> ownerIdOr = 
+              com.goodmem.db.util.UuidUtil.fromProtoBytes(request.getOwnerId());
+          
+          if (ownerIdOr.isNotOk()) {
+            Logger.error("Invalid owner ID format: {}", ownerIdOr.getStatus().getMessage());
+            responseObserver.onError(
+                io.grpc.Status.INVALID_ARGUMENT
+                    .withDescription("Invalid owner ID format")
+                    .asRuntimeException());
+            return;
+          }
+          
+          requestedOwnerId = ownerIdOr.getValue();
+        }
+        
+        // Label selectors
+        if (request.getLabelSelectorsCount() > 0) {
+          labelSelectors = request.getLabelSelectorsMap();
+        }
+        
+        // Name filter
+        if (request.hasNameFilter()) {
+          nameFilter = request.getNameFilter();
+        }
+        
+        // Sort parameters
+        if (request.hasSortBy()) {
+          sortBy = request.getSortBy();
+        }
+        
+        if (request.hasSortOrder()) {
+          sortOrder = request.getSortOrder();
+        }
+      }
+      
+      // Determine the owner ID to filter by based on permissions
+      UUID ownerIdFilter = null;
+      boolean includePublic = hasAnyPermission;
+      
+      if (hasAnyPermission) {
+        // With LIST_SPACE_ANY permission:
+        // - If an owner ID was requested, use it as a filter (show only that owner's spaces)
+        // - If no owner ID was requested, show all spaces (no owner filter)
+        ownerIdFilter = requestedOwnerId;
+      } else if (hasOwnPermission) {
+        // With only LIST_SPACE_OWN permission:
+        // - If an owner ID was requested and it's not the authenticated user, reject with PERMISSION_DENIED
+        // - Otherwise, filter to only show the authenticated user's spaces
+        if (requestedOwnerId != null && !requestedOwnerId.equals(authenticatedUser.getId())) {
+          Logger.error("User lacks permission to list spaces owned by others");
+          responseObserver.onError(
+              io.grpc.Status.PERMISSION_DENIED
+                  .withDescription("Permission denied")
+                  .asRuntimeException());
+          return;
+        }
+        
+        // Always filter by authenticated user ID when only having LIST_SPACE_OWN
+        ownerIdFilter = authenticatedUser.getId();
+        includePublic = false; // Don't include public spaces when only has LIST_SPACE_OWN
+      }
+      
+      // Convert name filter to SQL pattern if provided
+      String namePattern = null;
+      if (nameFilter != null && !nameFilter.isEmpty()) {
+        namePattern = globToSqlLike(nameFilter);
+      }
+      
+      // Determine sort direction
+      boolean sortAscending = (sortOrder == null || sortOrder == SortOrder.ASCENDING);
+      
+      // Query the database with the provided filters
+      try (java.sql.Connection connection = config.dataSource().getConnection()) {
+        com.goodmem.common.status.StatusOr<com.goodmem.db.Spaces.QueryResult> queryResultOr = 
+            com.goodmem.db.Spaces.querySpaces(
+                connection,
+                ownerIdFilter,
+                labelSelectors,
+                namePattern,
+                sortBy,
+                sortAscending,
+                offset,
+                maxResults,
+                includePublic,
+                authenticatedUser.getId());
+        
+        if (queryResultOr.isNotOk()) {
+          Logger.error("Database query error: {}", queryResultOr.getStatus().getMessage());
+          responseObserver.onError(
+              io.grpc.Status.INTERNAL
+                  .withDescription("Unexpected error while processing request.")
+                  .asRuntimeException());
+          return;
+        }
+        
+        com.goodmem.db.Spaces.QueryResult queryResult = queryResultOr.getValue();
+        
+        // Create the response builder
+        ListSpacesResponse.Builder responseBuilder = ListSpacesResponse.newBuilder();
+        
+        // Add the spaces to the response
+        for (com.goodmem.db.Space space : queryResult.getSpaces()) {
+          responseBuilder.addSpaces(space.toProto());
+        }
+        
+        // Generate next page token if there are more results
+        if (queryResult.hasMore(offset, maxResults)) {
+          int nextOffset = queryResult.getNextOffset(offset, maxResults);
+          
+          // Create the next page token
+          ListSpacesNextPageToken nextPageToken = createNextPageToken(
+              request.hasOwnerId() ? request.getOwnerId().toByteArray() : null,
+              labelSelectors,
+              nameFilter,
+              authenticatedUser.getId(),
+              nextOffset,
+              sortBy,
+              sortOrder);
+          
+          // Encode the token and add to the response
+          String encodedToken = encodeNextPageToken(nextPageToken);
+          responseBuilder.setNextToken(encodedToken);
+        }
+        
+        // Send the response
+        responseObserver.onNext(responseBuilder.build());
+        responseObserver.onCompleted();
+        
+      } catch (java.sql.SQLException e) {
+        Logger.error(e, "Database error during space listing: {}", e.getMessage());
+        responseObserver.onError(
+            io.grpc.Status.INTERNAL
+                .withDescription("Unexpected error while processing request.")
+                .asRuntimeException());
+      }
+    } catch (Exception e) {
+      Logger.error(e, "Unexpected error during space listing: {}", e.getMessage());
+      responseObserver.onError(
+          io.grpc.Status.INTERNAL
+              .withDescription("Unexpected error while processing request.")
+              .asRuntimeException());
+    }
   }
 
   /**
@@ -599,5 +842,160 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
   private Timestamp getCurrentTimestamp() {
     Instant now = Instant.now();
     return Timestamp.newBuilder().setSeconds(now.getEpochSecond()).setNanos(now.getNano()).build();
+  }
+  
+  /**
+   * Encodes a ListSpacesNextPageToken protobuf message into a Base64 string.
+   *
+   * @param token The token to encode
+   * @return The Base64-encoded string representation of the token
+   */
+  private String encodeNextPageToken(ListSpacesNextPageToken token) {
+    if (token == null) {
+      return "";
+    }
+    return BaseEncoding.base64().encode(token.toByteArray());
+  }
+  
+  /**
+   * Decodes a Base64 string into a ListSpacesNextPageToken protobuf message.
+   * Also validates that the requestor ID in the token matches the authenticated user.
+   *
+   * @param tokenString The Base64-encoded token string
+   * @param authenticatedUser The authenticated user making the request
+   * @return StatusOr containing the decoded token or an error status
+   */
+  private com.goodmem.common.status.StatusOr<ListSpacesNextPageToken> decodeAndValidateNextPageToken(
+      String tokenString, com.goodmem.security.User authenticatedUser) {
+    if (tokenString == null || tokenString.isEmpty()) {
+      return com.goodmem.common.status.StatusOr.ofValue(ListSpacesNextPageToken.getDefaultInstance());
+    }
+    
+    try {
+      // Decode the Base64 string to bytes
+      byte[] tokenBytes = BaseEncoding.base64().decode(tokenString);
+      
+      // Parse the bytes into a protobuf message
+      ListSpacesNextPageToken token = ListSpacesNextPageToken.parseFrom(tokenBytes);
+      
+      // Validate the requestor ID if present
+      if (token.hasRequestorId()) {
+        com.goodmem.common.status.StatusOr<UUID> requestorIdOr = 
+            com.goodmem.db.util.UuidUtil.fromProtoBytes(token.getRequestorId());
+            
+        if (requestorIdOr.isNotOk()) {
+          return com.goodmem.common.status.StatusOr.ofStatus(
+              com.goodmem.common.status.Status.invalid("Invalid requestor ID in token"));
+        }
+        
+        UUID tokenRequestorId = requestorIdOr.getValue();
+        
+        // Verify that the token's requestor ID matches the authenticated user
+        if (!tokenRequestorId.equals(authenticatedUser.getId())) {
+          Logger.warn("Token requestor ID does not match authenticated user: {} vs {}",
+              tokenRequestorId, authenticatedUser.getId());
+          return com.goodmem.common.status.StatusOr.ofStatus(
+              com.goodmem.common.status.Status.permissionDenied("Invalid pagination token"));
+        }
+      }
+      
+      return com.goodmem.common.status.StatusOr.ofValue(token);
+    } catch (IllegalArgumentException e) {
+      // Base64 decoding failed
+      Logger.warn("Failed to decode pagination token: {}", e.getMessage());
+      return com.goodmem.common.status.StatusOr.ofStatus(
+          com.goodmem.common.status.Status.invalid("Invalid pagination token format"));
+    } catch (InvalidProtocolBufferException e) {
+      // Protobuf parsing failed
+      Logger.warn("Failed to parse pagination token: {}", e.getMessage());
+      return com.goodmem.common.status.StatusOr.ofStatus(
+          com.goodmem.common.status.Status.invalid("Invalid pagination token content"));
+    }
+  }
+  
+  /**
+   * Creates a next page token with the given parameters.
+   *
+   * @param ownerId Filter by owner ID
+   * @param labelSelectors Partial match on labels
+   * @param nameFilter Glob-style match on space name
+   * @param requestorId ID of the authenticated user making the request
+   * @param start Cursor position for the next page
+   * @param sortBy Field to sort by
+   * @param sortOrder Ascending or descending sort
+   * @return The constructed ListSpacesNextPageToken message
+   */
+  private ListSpacesNextPageToken createNextPageToken(
+      byte[] ownerId,
+      Map<String, String> labelSelectors,
+      String nameFilter,
+      UUID requestorId,
+      int start,
+      String sortBy,
+      SortOrder sortOrder) {
+    
+    ListSpacesNextPageToken.Builder tokenBuilder = ListSpacesNextPageToken.newBuilder()
+        .setRequestorId(com.goodmem.db.util.UuidUtil.toProtoBytes(requestorId))
+        .setStart(start);
+    
+    // Set optional fields if provided
+    if (ownerId != null && ownerId.length > 0) {
+      tokenBuilder.setOwnerId(com.google.protobuf.ByteString.copyFrom(ownerId));
+    }
+    
+    if (labelSelectors != null && !labelSelectors.isEmpty()) {
+      tokenBuilder.putAllLabelSelectors(labelSelectors);
+    }
+    
+    if (nameFilter != null) {
+      tokenBuilder.setNameFilter(nameFilter);
+    }
+    
+    if (sortBy != null) {
+      tokenBuilder.setSortBy(sortBy);
+    }
+    
+    if (sortOrder != null) {
+      tokenBuilder.setSortOrder(sortOrder);
+    }
+    
+    return tokenBuilder.build();
+  }
+  
+  /**
+   * Converts a glob-style pattern ( * and ? wildcards ) to a SQL LIKE / ILIKE
+   * pattern, escaping literal %, _, and backslash characters.
+   *
+   * Examples:
+   *   globToSqlLike("Boy*")   -> "Boy%"
+   *   globToSqlLike("*Boy*")  -> "%Boy%"
+   *   globToSqlLike("B?y*")   -> "B_y%"
+   *
+   * Pass the result to a PreparedStatement and add  "ESCAPE '\'"
+   * in your SQL so the backslash is the explicit escape character.
+   *
+   *   String sql =
+   *     "SELECT * FROM spaces WHERE name ILIKE ? ESCAPE '\\\\'";
+   *   ps.setString(1, globToSqlLike(pattern));
+   */
+  public static String globToSqlLike(String glob) {
+    if (glob == null || glob.isEmpty()) {
+      return "%";             // match everything
+    }
+
+    StringBuilder sb = new StringBuilder(glob.length() + 4);
+
+    for (int i = 0; i < glob.length(); i++) {
+      char c = glob.charAt(i);
+      switch (c) {
+        case '\\': sb.append("\\\\"); break;   // escape backslash itself
+        case '%':  sb.append("\\%"); break;    // escape SQL %
+        case '_':  sb.append("\\_"); break;    // escape SQL _
+        case '*':  sb.append('%'); break;      // glob * -> SQL %
+        case '?':  sb.append('_'); break;      // glob ? -> SQL _
+        default:   sb.append(c);
+      }
+    }
+    return sb.toString();
   }
 }

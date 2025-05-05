@@ -386,11 +386,18 @@ func (x *ListApiKeysResponse) GetKeys() []*ApiKey {
 type UpdateApiKeyRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	ApiKeyId []byte                 `protobuf:"bytes,1,opt,name=api_key_id,json=apiKeyId,proto3" json:"api_key_id,omitempty"` // Required: ID of the key to update (16 bytes UUID)
-	// Optional fields to update. Use field masks for partial updates.
-	Labels        map[string]string `protobuf:"bytes,2,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Status        Status            `protobuf:"varint,3,opt,name=status,proto3,enum=goodmem.v1.Status" json:"status,omitempty"` // updated_by_id derived from auth context.
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Optional fields to update.
+	Status *Status `protobuf:"varint,3,opt,name=status,proto3,enum=goodmem.v1.Status,oneof" json:"status,omitempty"`
+	// Use a oneof containing fields of the WRAPPER message type.
+	// This achieves mutual exclusion while complying with proto3 rules.
+	//
+	// Types that are valid to be assigned to LabelUpdateStrategy:
+	//
+	//	*UpdateApiKeyRequest_ReplaceLabels
+	//	*UpdateApiKeyRequest_MergeLabels
+	LabelUpdateStrategy isUpdateApiKeyRequest_LabelUpdateStrategy `protobuf_oneof:"label_update_strategy"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *UpdateApiKeyRequest) Reset() {
@@ -430,19 +437,57 @@ func (x *UpdateApiKeyRequest) GetApiKeyId() []byte {
 	return nil
 }
 
-func (x *UpdateApiKeyRequest) GetLabels() map[string]string {
+func (x *UpdateApiKeyRequest) GetStatus() Status {
+	if x != nil && x.Status != nil {
+		return *x.Status
+	}
+	return Status_STATUS_UNSPECIFIED
+}
+
+func (x *UpdateApiKeyRequest) GetLabelUpdateStrategy() isUpdateApiKeyRequest_LabelUpdateStrategy {
 	if x != nil {
-		return x.Labels
+		return x.LabelUpdateStrategy
 	}
 	return nil
 }
 
-func (x *UpdateApiKeyRequest) GetStatus() Status {
+func (x *UpdateApiKeyRequest) GetReplaceLabels() *StringMap {
 	if x != nil {
-		return x.Status
+		if x, ok := x.LabelUpdateStrategy.(*UpdateApiKeyRequest_ReplaceLabels); ok {
+			return x.ReplaceLabels
+		}
 	}
-	return Status_STATUS_UNSPECIFIED
+	return nil
 }
+
+func (x *UpdateApiKeyRequest) GetMergeLabels() *StringMap {
+	if x != nil {
+		if x, ok := x.LabelUpdateStrategy.(*UpdateApiKeyRequest_MergeLabels); ok {
+			return x.MergeLabels
+		}
+	}
+	return nil
+}
+
+type isUpdateApiKeyRequest_LabelUpdateStrategy interface {
+	isUpdateApiKeyRequest_LabelUpdateStrategy()
+}
+
+type UpdateApiKeyRequest_ReplaceLabels struct {
+	// If 'replace_labels' is the field set in the oneof, it signifies
+	// the intent to replace all existing labels with this set.
+	ReplaceLabels *StringMap `protobuf:"bytes,2,opt,name=replace_labels,json=replaceLabels,proto3,oneof"`
+}
+
+type UpdateApiKeyRequest_MergeLabels struct {
+	// If 'merge_labels' is the field set in the oneof, it signifies
+	// the intent to merge these labels with existing ones.
+	MergeLabels *StringMap `protobuf:"bytes,4,opt,name=merge_labels,json=mergeLabels,proto3,oneof"`
+}
+
+func (*UpdateApiKeyRequest_ReplaceLabels) isUpdateApiKeyRequest_LabelUpdateStrategy() {}
+
+func (*UpdateApiKeyRequest_MergeLabels) isUpdateApiKeyRequest_LabelUpdateStrategy() {}
 
 type DeleteApiKeyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -493,7 +538,7 @@ var File_goodmem_v1_apikey_proto protoreflect.FileDescriptor
 const file_goodmem_v1_apikey_proto_rawDesc = "" +
 	"\n" +
 	"\x17goodmem/v1/apikey.proto\x12\n" +
-	"goodmem.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bgoogle/protobuf/empty.proto\"\xb4\x04\n" +
+	"goodmem.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x17goodmem/v1/common.proto\"\xb4\x04\n" +
 	"\x06ApiKey\x12\x1c\n" +
 	"\n" +
 	"api_key_id\x18\x01 \x01(\fR\bapiKeyId\x12\x17\n" +
@@ -528,15 +573,15 @@ const file_goodmem_v1_apikey_proto_rawDesc = "" +
 	"\vraw_api_key\x18\x02 \x01(\tR\trawApiKey\"\x14\n" +
 	"\x12ListApiKeysRequest\"=\n" +
 	"\x13ListApiKeysResponse\x12&\n" +
-	"\x04keys\x18\x01 \x03(\v2\x12.goodmem.v1.ApiKeyR\x04keys\"\xdf\x01\n" +
+	"\x04keys\x18\x01 \x03(\v2\x12.goodmem.v1.ApiKeyR\x04keys\"\x84\x02\n" +
 	"\x13UpdateApiKeyRequest\x12\x1c\n" +
 	"\n" +
-	"api_key_id\x18\x01 \x01(\fR\bapiKeyId\x12C\n" +
-	"\x06labels\x18\x02 \x03(\v2+.goodmem.v1.UpdateApiKeyRequest.LabelsEntryR\x06labels\x12*\n" +
-	"\x06status\x18\x03 \x01(\x0e2\x12.goodmem.v1.StatusR\x06status\x1a9\n" +
-	"\vLabelsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"3\n" +
+	"api_key_id\x18\x01 \x01(\fR\bapiKeyId\x12/\n" +
+	"\x06status\x18\x03 \x01(\x0e2\x12.goodmem.v1.StatusH\x01R\x06status\x88\x01\x01\x12>\n" +
+	"\x0ereplace_labels\x18\x02 \x01(\v2\x15.goodmem.v1.StringMapH\x00R\rreplaceLabels\x12:\n" +
+	"\fmerge_labels\x18\x04 \x01(\v2\x15.goodmem.v1.StringMapH\x00R\vmergeLabelsB\x17\n" +
+	"\x15label_update_strategyB\t\n" +
+	"\a_status\"3\n" +
 	"\x13DeleteApiKeyRequest\x12\x1c\n" +
 	"\n" +
 	"api_key_id\x18\x01 \x01(\fR\bapiKeyId*:\n" +
@@ -564,7 +609,7 @@ func file_goodmem_v1_apikey_proto_rawDescGZIP() []byte {
 }
 
 var file_goodmem_v1_apikey_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_goodmem_v1_apikey_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_goodmem_v1_apikey_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_goodmem_v1_apikey_proto_goTypes = []any{
 	(Status)(0),                   // 0: goodmem.v1.Status
 	(*ApiKey)(nil),                // 1: goodmem.v1.ApiKey
@@ -576,36 +621,37 @@ var file_goodmem_v1_apikey_proto_goTypes = []any{
 	(*DeleteApiKeyRequest)(nil),   // 7: goodmem.v1.DeleteApiKeyRequest
 	nil,                           // 8: goodmem.v1.ApiKey.LabelsEntry
 	nil,                           // 9: goodmem.v1.CreateApiKeyRequest.LabelsEntry
-	nil,                           // 10: goodmem.v1.UpdateApiKeyRequest.LabelsEntry
-	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(*StringMap)(nil),             // 11: goodmem.v1.StringMap
 	(*emptypb.Empty)(nil),         // 12: google.protobuf.Empty
 }
 var file_goodmem_v1_apikey_proto_depIdxs = []int32{
 	0,  // 0: goodmem.v1.ApiKey.status:type_name -> goodmem.v1.Status
 	8,  // 1: goodmem.v1.ApiKey.labels:type_name -> goodmem.v1.ApiKey.LabelsEntry
-	11, // 2: goodmem.v1.ApiKey.expires_at:type_name -> google.protobuf.Timestamp
-	11, // 3: goodmem.v1.ApiKey.last_used_at:type_name -> google.protobuf.Timestamp
-	11, // 4: goodmem.v1.ApiKey.created_at:type_name -> google.protobuf.Timestamp
-	11, // 5: goodmem.v1.ApiKey.updated_at:type_name -> google.protobuf.Timestamp
+	10, // 2: goodmem.v1.ApiKey.expires_at:type_name -> google.protobuf.Timestamp
+	10, // 3: goodmem.v1.ApiKey.last_used_at:type_name -> google.protobuf.Timestamp
+	10, // 4: goodmem.v1.ApiKey.created_at:type_name -> google.protobuf.Timestamp
+	10, // 5: goodmem.v1.ApiKey.updated_at:type_name -> google.protobuf.Timestamp
 	9,  // 6: goodmem.v1.CreateApiKeyRequest.labels:type_name -> goodmem.v1.CreateApiKeyRequest.LabelsEntry
-	11, // 7: goodmem.v1.CreateApiKeyRequest.expires_at:type_name -> google.protobuf.Timestamp
+	10, // 7: goodmem.v1.CreateApiKeyRequest.expires_at:type_name -> google.protobuf.Timestamp
 	1,  // 8: goodmem.v1.CreateApiKeyResponse.api_key_metadata:type_name -> goodmem.v1.ApiKey
 	1,  // 9: goodmem.v1.ListApiKeysResponse.keys:type_name -> goodmem.v1.ApiKey
-	10, // 10: goodmem.v1.UpdateApiKeyRequest.labels:type_name -> goodmem.v1.UpdateApiKeyRequest.LabelsEntry
-	0,  // 11: goodmem.v1.UpdateApiKeyRequest.status:type_name -> goodmem.v1.Status
-	2,  // 12: goodmem.v1.ApiKeyService.CreateApiKey:input_type -> goodmem.v1.CreateApiKeyRequest
-	4,  // 13: goodmem.v1.ApiKeyService.ListApiKeys:input_type -> goodmem.v1.ListApiKeysRequest
-	6,  // 14: goodmem.v1.ApiKeyService.UpdateApiKey:input_type -> goodmem.v1.UpdateApiKeyRequest
-	7,  // 15: goodmem.v1.ApiKeyService.DeleteApiKey:input_type -> goodmem.v1.DeleteApiKeyRequest
-	3,  // 16: goodmem.v1.ApiKeyService.CreateApiKey:output_type -> goodmem.v1.CreateApiKeyResponse
-	5,  // 17: goodmem.v1.ApiKeyService.ListApiKeys:output_type -> goodmem.v1.ListApiKeysResponse
-	1,  // 18: goodmem.v1.ApiKeyService.UpdateApiKey:output_type -> goodmem.v1.ApiKey
-	12, // 19: goodmem.v1.ApiKeyService.DeleteApiKey:output_type -> google.protobuf.Empty
-	16, // [16:20] is the sub-list for method output_type
-	12, // [12:16] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	0,  // 10: goodmem.v1.UpdateApiKeyRequest.status:type_name -> goodmem.v1.Status
+	11, // 11: goodmem.v1.UpdateApiKeyRequest.replace_labels:type_name -> goodmem.v1.StringMap
+	11, // 12: goodmem.v1.UpdateApiKeyRequest.merge_labels:type_name -> goodmem.v1.StringMap
+	2,  // 13: goodmem.v1.ApiKeyService.CreateApiKey:input_type -> goodmem.v1.CreateApiKeyRequest
+	4,  // 14: goodmem.v1.ApiKeyService.ListApiKeys:input_type -> goodmem.v1.ListApiKeysRequest
+	6,  // 15: goodmem.v1.ApiKeyService.UpdateApiKey:input_type -> goodmem.v1.UpdateApiKeyRequest
+	7,  // 16: goodmem.v1.ApiKeyService.DeleteApiKey:input_type -> goodmem.v1.DeleteApiKeyRequest
+	3,  // 17: goodmem.v1.ApiKeyService.CreateApiKey:output_type -> goodmem.v1.CreateApiKeyResponse
+	5,  // 18: goodmem.v1.ApiKeyService.ListApiKeys:output_type -> goodmem.v1.ListApiKeysResponse
+	1,  // 19: goodmem.v1.ApiKeyService.UpdateApiKey:output_type -> goodmem.v1.ApiKey
+	12, // 20: goodmem.v1.ApiKeyService.DeleteApiKey:output_type -> google.protobuf.Empty
+	17, // [17:21] is the sub-list for method output_type
+	13, // [13:17] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_goodmem_v1_apikey_proto_init() }
@@ -613,13 +659,18 @@ func file_goodmem_v1_apikey_proto_init() {
 	if File_goodmem_v1_apikey_proto != nil {
 		return
 	}
+	file_goodmem_v1_common_proto_init()
+	file_goodmem_v1_apikey_proto_msgTypes[5].OneofWrappers = []any{
+		(*UpdateApiKeyRequest_ReplaceLabels)(nil),
+		(*UpdateApiKeyRequest_MergeLabels)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goodmem_v1_apikey_proto_rawDesc), len(file_goodmem_v1_apikey_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   10,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -48,6 +48,11 @@ public class Status {
   public static Status invalidArgument(String message) {
     return new Status(StatusCode.INVALID_ARGUMENT, message, null);
   }
+  
+  /** Creates a new INVALID status with the given message. */
+  public static Status invalid(String message) {
+    return new Status(StatusCode.INVALID_ARGUMENT, message, null);
+  }
 
   /** Creates a new ALREADY_EXISTS status with the given message. */
   public static Status alreadyExists(String message) {
