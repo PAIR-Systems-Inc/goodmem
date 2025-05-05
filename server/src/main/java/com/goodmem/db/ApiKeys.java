@@ -1,5 +1,6 @@
 package com.goodmem.db;
 
+import com.goodmem.common.status.Status;
 import com.goodmem.common.status.StatusOr;
 import com.goodmem.db.util.DbUtil;
 import com.google.common.collect.ImmutableList;
@@ -291,9 +292,13 @@ public final class ApiKeys {
       System.out.println("  5. status = " + apiKey.status());
       stmt.setString(5, apiKey.status());
 
-      // Note: In a real implementation, this would use proper JSONB handling
-      System.out.println("  6. labels = (null placeholder)");
-      stmt.setObject(6, null); // Placeholder for JSONB
+      // Set JSONB labels using the DbUtil helper
+      System.out.println("  6. labels = " + apiKey.labels());
+      Status jsonbStatus = DbUtil.setJsonbParameter(stmt, 6, apiKey.labels());
+      if (jsonbStatus.isError()) {
+        System.err.println("Failed to set labels JSONB: " + jsonbStatus.getMessage());
+        throw new SQLException("Failed to set JSONB parameter: " + jsonbStatus.getMessage());
+      }
 
       if (apiKey.expiresAt() != null) {
         System.out.println("  7. expires_at = " + apiKey.expiresAt());
@@ -462,10 +467,12 @@ public final class ApiKeys {
     ByteString keyHash = ByteString.copyFrom(rs.getBytes("key_hash"));
     String status = rs.getString("status");
 
-    // Note: In a real implementation, you would use proper JSONB parsing
-    // For example:
-    // StatusOr<Map<String, String>> labelsOr = DbUtil.parseJsonbToMap(rs, "labels");
-    Map<String, String> labels = Map.of(); // Placeholder for JSONB
+    // Parse JSONB labels using the DbUtil helper
+    StatusOr<Map<String, String>> labelsOr = DbUtil.parseJsonbToMap(rs, "labels");
+    if (labelsOr.isNotOk()) {
+      return StatusOr.ofStatus(labelsOr.getStatus());
+    }
+    Map<String, String> labels = labelsOr.getValue();
 
     StatusOr<Optional<Instant>> expiresAtOr = DbUtil.getOptionalInstant(rs, "expires_at");
     if (expiresAtOr.isNotOk()) {
