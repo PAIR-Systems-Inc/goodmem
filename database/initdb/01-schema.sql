@@ -119,25 +119,6 @@ CREATE INDEX idx_memory_chunk_embedding_vector ON memory_chunk USING hnsw (embed
 -- Alternative index using Cosine distance (commented out):
 -- CREATE INDEX idx_memory_chunk_embedding_vector_cosine ON memory_chunk USING hnsw (embedding_vector vector_cosine_ops);
 
--- Trigger function to update 'updated_at' timestamps automatically
-CREATE OR REPLACE FUNCTION trigger_set_timestamp()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Apply trigger to tables
-CREATE TRIGGER set_timestamp_user BEFORE UPDATE ON "user" FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
-CREATE TRIGGER set_timestamp_role BEFORE UPDATE ON role FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
-CREATE TRIGGER set_timestamp_user_role BEFORE UPDATE ON user_role FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
-CREATE TRIGGER set_timestamp_apikey BEFORE UPDATE ON apikey FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
-CREATE TRIGGER set_timestamp_space BEFORE UPDATE ON space FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
-CREATE TRIGGER set_timestamp_memory BEFORE UPDATE ON memory FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
-CREATE TRIGGER set_timestamp_memory_chunk BEFORE UPDATE ON memory_chunk FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
-CREATE TRIGGER set_timestamp_embedder BEFORE UPDATE ON embedder FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
-
 -- ENUM types definitions
 -- CREATE TYPE api_key_status AS ENUM ('ACTIVE', 'INACTIVE');
 -- CREATE TYPE processing_status_enum AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED');
@@ -181,7 +162,6 @@ CREATE TABLE embedder (
     /* labels & MLOps info */
     labels                 JSONB,
     version                VARCHAR(64),
-    deployment_context     JSONB,
     monitoring_endpoint    TEXT,
 
     /* ownership & audit */
@@ -194,6 +174,25 @@ CREATE TABLE embedder (
     /* avoid duplicate registrations */
     UNIQUE (endpoint_url, api_path, model_identifier)
 );
+
+-- Trigger function to update 'updated_at' timestamps automatically
+CREATE OR REPLACE FUNCTION trigger_set_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Apply trigger to tables
+CREATE TRIGGER set_timestamp_user BEFORE UPDATE ON "user" FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+CREATE TRIGGER set_timestamp_role BEFORE UPDATE ON role FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+CREATE TRIGGER set_timestamp_user_role BEFORE UPDATE ON user_role FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+CREATE TRIGGER set_timestamp_apikey BEFORE UPDATE ON apikey FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+CREATE TRIGGER set_timestamp_space BEFORE UPDATE ON space FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+CREATE TRIGGER set_timestamp_memory BEFORE UPDATE ON memory FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+CREATE TRIGGER set_timestamp_memory_chunk BEFORE UPDATE ON memory_chunk FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+CREATE TRIGGER set_timestamp_embedder BEFORE UPDATE ON embedder FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 
 -- Indexes for the embedder table
 CREATE INDEX idx_embedder_provider_type ON embedder (provider_type);

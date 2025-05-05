@@ -40,7 +40,8 @@ public class EmbeddersTest {
   @BeforeAll
   static void setUp() throws SQLException {
     // Setup PostgreSQL container with schema initialization
-    postgresContext = PostgresTestHelper.setupPostgres("goodmem_embedders_test", EmbeddersTest.class);
+    postgresContext =
+        PostgresTestHelper.setupPostgres("goodmem_embedders_test", EmbeddersTest.class);
     connection = postgresContext.getConnection();
 
     // Create a test user that will be reused across tests
@@ -158,13 +159,14 @@ public class EmbeddersTest {
     Embedders.save(connection, teiEmbedder);
 
     // When: We load embedders by provider type
-    StatusOr<List<Embedder>> result = Embedders.loadByProviderType(connection, EmbedderProviderType.OPENAI);
+    StatusOr<List<Embedder>> result =
+        Embedders.loadByProviderType(connection, EmbedderProviderType.OPENAI);
 
     // Then: Only embedders of that provider type are returned
     assertTrue(result.isOk());
     assertEquals(1, result.getValue().size());
-    assertEquals("OpenAI Embedder", result.getValue().get(0).displayName());
-    assertEquals(EmbedderProviderType.OPENAI, result.getValue().get(0).providerType());
+    assertEquals("OpenAI Embedder", result.getValue().getFirst().displayName());
+    assertEquals(EmbedderProviderType.OPENAI, result.getValue().getFirst().providerType());
   }
 
   @Test
@@ -174,11 +176,9 @@ public class EmbeddersTest {
     Embedders.save(connection, embedder);
 
     // When: We load the embedder by connection details
-    StatusOr<Optional<Embedder>> result = Embedders.loadByConnectionDetails(
-        connection, 
-        "https://api.openai.com", 
-        "/v1/embeddings", 
-        "text-embedding-3-small");
+    StatusOr<Optional<Embedder>> result =
+        Embedders.loadByConnectionDetails(
+            connection, "https://api.openai.com", "/v1/embeddings", "text-embedding-3-small");
 
     // Then: The embedder is returned
     assertTrue(result.isOk());
@@ -213,28 +213,28 @@ public class EmbeddersTest {
 
     // When: We update the embedder
     Instant now = Instant.now();
-    Embedder updatedEmbedder = new Embedder(
-        embedder.embedderId(),
-        "Updated Name",  // Changed display name
-        "Updated description",  // Changed description
-        embedder.providerType(),
-        embedder.endpointUrl(),
-        embedder.apiPath(),
-        embedder.modelIdentifier(),
-        1024,  // Changed dimensionality
-        512,  // Added max sequence length
-        ImmutableList.of(EmbedderModality.TEXT, EmbedderModality.IMAGE),  // Changed modalities
-        embedder.credentials(),
-        Map.of("updated", "true"),  // Changed labels
-        "1.1",  // Changed version
-        embedder.deploymentContext(),
-        embedder.monitoringEndpoint(),
-        embedder.ownerId(),
-        embedder.createdAt(),
-        now,  // Updated updatedAt
-        embedder.createdById(),
-        embedder.updatedById());
-    
+    Embedder updatedEmbedder =
+        new Embedder(
+            embedder.embedderId(),
+            "Updated Name", // Changed display name
+            "Updated description", // Changed description
+            embedder.providerType(),
+            embedder.endpointUrl(),
+            embedder.apiPath(),
+            embedder.modelIdentifier(),
+            1024, // Changed dimensionality
+            512, // Added max sequence length
+            ImmutableList.of(EmbedderModality.TEXT, EmbedderModality.IMAGE), // Changed modalities
+            embedder.credentials(),
+            Map.of("updated", "true"), // Changed labels
+            "1.1", // Changed version
+            embedder.monitoringEndpoint(),
+            embedder.ownerId(),
+            embedder.createdAt(),
+            now, // Updated updatedAt
+            embedder.createdById(),
+            embedder.updatedById());
+
     StatusOr<Integer> result = Embedders.save(connection, updatedEmbedder);
 
     // Then: The operation succeeds and returns 1 affected row
@@ -318,7 +318,7 @@ public class EmbeddersTest {
   private Embedder createTestEmbedder(String displayName, EmbedderProviderType providerType) {
     UUID embedderId = UUID.randomUUID();
     Instant now = Instant.now();
-    
+
     String modelIdentifier = "text-embedding-3-small";
     String endpointUrl = "https://api.openai.com";
     if (providerType == EmbedderProviderType.VLLM) {
@@ -328,7 +328,7 @@ public class EmbeddersTest {
       modelIdentifier = "text-embedding";
       endpointUrl = "https://tei.googleapis.com";
     }
-    
+
     return new Embedder(
         embedderId,
         displayName,
@@ -343,7 +343,6 @@ public class EmbeddersTest {
         "api_key_test_123",
         ImmutableMap.of("test", "true", "environment", "development"),
         "1.0",
-        ImmutableMap.of("deployment", "test"),
         null, // No monitoring endpoint
         testUserId,
         now,

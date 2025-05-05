@@ -2,6 +2,8 @@ package com.goodmem.db;
 
 import com.goodmem.db.util.DbUtil;
 import com.goodmem.db.util.UuidUtil;
+import goodmem.v1.EmbedderOuterClass.Modality;
+import goodmem.v1.EmbedderOuterClass.ProviderType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -23,7 +25,6 @@ import java.util.UUID;
  * @param credentials API credentials (to be encrypted)
  * @param labels User-defined labels for the embedder
  * @param version Optional version information
- * @param deploymentContext Optional deployment context information
  * @param monitoringEndpoint Optional monitoring endpoint
  * @param ownerId The user ID of the owner
  * @param createdAt Timestamp when the record was created
@@ -45,7 +46,6 @@ public record Embedder(
     String credentials,
     Map<String, String> labels,
     String version,
-    Map<String, Object> deploymentContext,
     String monitoringEndpoint,
     UUID ownerId,
     Instant createdAt,
@@ -58,9 +58,9 @@ public record Embedder(
    *
    * @return The Protocol Buffer Embedder message
    */
-  public goodmem.v1.Embedder toProto() {
-    goodmem.v1.Embedder.Builder builder =
-        goodmem.v1.Embedder.newBuilder()
+  public goodmem.v1.EmbedderOuterClass.Embedder toProto() {
+    goodmem.v1.EmbedderOuterClass.Embedder.Builder builder =
+        goodmem.v1.EmbedderOuterClass.Embedder.newBuilder()
             .setEmbedderId(UuidUtil.toProtoBytes(embedderId))
             .setDisplayName(displayName)
             .setProviderType(convertProviderTypeToProto(providerType))
@@ -84,8 +84,8 @@ public record Embedder(
     }
 
     if (supportedModalities != null && !supportedModalities.isEmpty()) {
-      supportedModalities.forEach(modality -> 
-          builder.addSupportedModalities(convertModalityToProto(modality)));
+      supportedModalities.forEach(
+          modality -> builder.addSupportedModalities(convertModalityToProto(modality)));
     }
 
     if (credentials != null) {
@@ -107,35 +107,36 @@ public record Embedder(
 
     return builder.build();
   }
-  
+
   /**
    * Converts Java enum to Proto enum for Provider Type.
    *
    * @param providerType The Java ProviderType enum
    * @return The Proto ProviderType enum
    */
-  private goodmem.v1.ProviderType convertProviderTypeToProto(EmbedderProviderType providerType) {
+  private ProviderType convertProviderTypeToProto(
+      EmbedderProviderType providerType) {
     return switch (providerType) {
-      case OPENAI -> goodmem.v1.ProviderType.PROVIDER_TYPE_OPENAI;
-      case VLLM -> goodmem.v1.ProviderType.PROVIDER_TYPE_VLLM;
-      case TEI -> goodmem.v1.ProviderType.PROVIDER_TYPE_TEI;
-      default -> goodmem.v1.ProviderType.PROVIDER_TYPE_UNSPECIFIED;
+      case OPENAI -> ProviderType.PROVIDER_TYPE_OPENAI;
+      case VLLM -> ProviderType.PROVIDER_TYPE_VLLM;
+      case TEI -> ProviderType.PROVIDER_TYPE_TEI;
+      default -> ProviderType.PROVIDER_TYPE_UNSPECIFIED;
     };
   }
-  
+
   /**
    * Converts Java enum to Proto enum for Modality.
    *
    * @param modality The Java Modality enum
    * @return The Proto Modality enum
    */
-  private goodmem.v1.Modality convertModalityToProto(EmbedderModality modality) {
+  private Modality convertModalityToProto(EmbedderModality modality) {
     return switch (modality) {
-      case TEXT -> goodmem.v1.Modality.MODALITY_TEXT;
-      case IMAGE -> goodmem.v1.Modality.MODALITY_IMAGE;
-      case AUDIO -> goodmem.v1.Modality.MODALITY_AUDIO;
-      case VIDEO -> goodmem.v1.Modality.MODALITY_VIDEO;
-      default -> goodmem.v1.Modality.MODALITY_UNSPECIFIED;
+      case TEXT -> Modality.MODALITY_TEXT;
+      case IMAGE -> Modality.MODALITY_IMAGE;
+      case AUDIO -> Modality.MODALITY_AUDIO;
+      case VIDEO -> Modality.MODALITY_VIDEO;
+      default -> Modality.MODALITY_UNSPECIFIED;
     };
   }
 }

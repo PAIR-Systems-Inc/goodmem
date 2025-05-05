@@ -36,7 +36,7 @@ public final class Embedders {
         """
         SELECT embedder_id, display_name, description, provider_type, endpoint_url, api_path,
                model_identifier, dimensionality, max_sequence_length, supported_modalities,
-               credentials, labels, version, deployment_context, monitoring_endpoint,
+               credentials, labels, version, monitoring_endpoint,
                owner_id, created_at, updated_at, created_by_id, updated_by_id
           FROM embedder
         """;
@@ -69,7 +69,7 @@ public final class Embedders {
         """
         SELECT embedder_id, display_name, description, provider_type, endpoint_url, api_path,
                model_identifier, dimensionality, max_sequence_length, supported_modalities,
-               credentials, labels, version, deployment_context, monitoring_endpoint,
+               credentials, labels, version, monitoring_endpoint,
                owner_id, created_at, updated_at, created_by_id, updated_by_id
           FROM embedder
          WHERE embedder_id = ?
@@ -104,7 +104,7 @@ public final class Embedders {
         """
         SELECT embedder_id, display_name, description, provider_type, endpoint_url, api_path,
                model_identifier, dimensionality, max_sequence_length, supported_modalities,
-               credentials, labels, version, deployment_context, monitoring_endpoint,
+               credentials, labels, version, monitoring_endpoint,
                owner_id, created_at, updated_at, created_by_id, updated_by_id
           FROM embedder
          WHERE owner_id = ?
@@ -141,13 +141,14 @@ public final class Embedders {
         """
         SELECT embedder_id, display_name, description, provider_type, endpoint_url, api_path,
                model_identifier, dimensionality, max_sequence_length, supported_modalities,
-               credentials, labels, version, deployment_context, monitoring_endpoint,
+               credentials, labels, version, monitoring_endpoint,
                owner_id, created_at, updated_at, created_by_id, updated_by_id
           FROM embedder
          WHERE provider_type = ?
         """;
     try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, providerType.toDatabaseValue());
+      // Cast the string to the provider_type_enum PostgreSQL type
+      stmt.setObject(1, providerType.toDatabaseValue(), java.sql.Types.OTHER);
       try (ResultSet rs = stmt.executeQuery()) {
         List<Embedder> result = new ArrayList<>();
         while (rs.next()) {
@@ -180,7 +181,7 @@ public final class Embedders {
         """
         SELECT embedder_id, display_name, description, provider_type, endpoint_url, api_path,
                model_identifier, dimensionality, max_sequence_length, supported_modalities,
-               credentials, labels, version, deployment_context, monitoring_endpoint,
+               credentials, labels, version, monitoring_endpoint,
                owner_id, created_at, updated_at, created_by_id, updated_by_id
           FROM embedder
          WHERE endpoint_url = ? AND api_path = ? AND model_identifier = ?
@@ -218,9 +219,9 @@ public final class Embedders {
         INSERT INTO embedder
                (embedder_id, display_name, description, provider_type, endpoint_url, api_path,
                 model_identifier, dimensionality, max_sequence_length, supported_modalities,
-                credentials, labels, version, deployment_context, monitoring_endpoint,
+                credentials, labels, version, monitoring_endpoint,
                 owner_id, created_at, updated_at, created_by_id, updated_by_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(embedder_id)
         DO UPDATE SET display_name          = excluded.display_name,
                       description           = excluded.description,
@@ -234,7 +235,6 @@ public final class Embedders {
                       credentials           = excluded.credentials,
                       labels                = excluded.labels,
                       version               = excluded.version,
-                      deployment_context    = excluded.deployment_context,
                       monitoring_endpoint   = excluded.monitoring_endpoint,
                       owner_id              = excluded.owner_id,
                       updated_at            = excluded.updated_at,
@@ -244,7 +244,8 @@ public final class Embedders {
       stmt.setObject(1, embedder.embedderId());
       stmt.setString(2, embedder.displayName());
       stmt.setString(3, embedder.description());
-      stmt.setString(4, embedder.providerType().toDatabaseValue());
+      // Cast the string to the provider_type_enum PostgreSQL type
+      stmt.setObject(4, embedder.providerType().toDatabaseValue(), java.sql.Types.OTHER);
       stmt.setString(5, embedder.endpointUrl());
       stmt.setString(6, embedder.apiPath());
       stmt.setString(7, embedder.modelIdentifier());
@@ -257,7 +258,7 @@ public final class Embedders {
         stmt.setNull(9, java.sql.Types.INTEGER);
       }
       
-      // Convert supported modalities to a PostgreSQL array
+      // Convert supported modalities to a PostgreSQL array of modality_enum type
       if (embedder.supportedModalities() != null && !embedder.supportedModalities().isEmpty()) {
         String[] modalitiesArray = embedder.supportedModalities().stream()
             .map(EmbedderModality::toDatabaseValue)
@@ -279,19 +280,12 @@ public final class Embedders {
       }
       
       stmt.setString(13, embedder.version());
-      
-      // Process and set the deployment context as JSONB
-      Status dcStatus = DbUtil.setJsonbParameter(stmt, 14, embedder.deploymentContext());
-      if (!dcStatus.isOk()) {
-        return StatusOr.ofStatus(dcStatus);
-      }
-      
-      stmt.setString(15, embedder.monitoringEndpoint());
-      stmt.setObject(16, embedder.ownerId());
-      stmt.setTimestamp(17, DbUtil.toSqlTimestamp(embedder.createdAt()));
-      stmt.setTimestamp(18, DbUtil.toSqlTimestamp(embedder.updatedAt()));
-      stmt.setObject(19, embedder.createdById());
-      stmt.setObject(20, embedder.updatedById());
+      stmt.setString(14, embedder.monitoringEndpoint());
+      stmt.setObject(15, embedder.ownerId());
+      stmt.setTimestamp(16, DbUtil.toSqlTimestamp(embedder.createdAt()));
+      stmt.setTimestamp(17, DbUtil.toSqlTimestamp(embedder.updatedAt()));
+      stmt.setObject(18, embedder.createdById());
+      stmt.setObject(19, embedder.updatedById());
 
       int rowsAffected = stmt.executeUpdate();
       return StatusOr.ofValue(rowsAffected);
@@ -381,14 +375,6 @@ public final class Embedders {
     
     String version = rs.getString("version");
     
-    // Parse the JSONB deployment context
-    StatusOr<Map<String, Object>> deploymentContextOr = 
-        DbUtil.parseJsonbToObjectMap(rs, "deployment_context");
-    if (deploymentContextOr.isNotOk()) {
-      return StatusOr.ofStatus(deploymentContextOr.getStatus());
-    }
-    Map<String, Object> deploymentContext = deploymentContextOr.getValue();
-    
     String monitoringEndpoint = rs.getString("monitoring_endpoint");
 
     StatusOr<UUID> ownerIdOr = DbUtil.getUuid(rs, "owner_id");
@@ -431,7 +417,6 @@ public final class Embedders {
             credentials,
             labels,
             version,
-            deploymentContext,
             monitoringEndpoint,
             ownerIdOr.getValue(),
             createdAtOr.getValue(),
