@@ -41,7 +41,7 @@ dependencies {
     // Database
     implementation("org.postgresql:postgresql:42.7.3")
     implementation("com.zaxxer:HikariCP:5.1.0") // Connection pooling
-    implementation("com.google.guava:guava:33.0.0-jre")
+    implementation("com.google.guava:guava:33.4.8-jre")
     
     // Testing
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
