@@ -86,5 +86,39 @@ public enum Permission {
   LIST_APIKEY_OWN,
 
   /** Permission for a user to list any API key in the system. */
-  LIST_APIKEY_ANY;
+  LIST_APIKEY_ANY,
+  
+  // Embedder permissions
+  /** Permission for a user to create embedders for their own account. */
+  CREATE_EMBEDDER_OWN,
+
+  /** Permission for a user to create embedders for any user in the system. */
+  CREATE_EMBEDDER_ANY,
+
+  /** Permission for a user to view their own embedders. */
+  READ_EMBEDDER_OWN,
+
+  /** Permission for a user to view any embedder in the system. */
+  READ_EMBEDDER_ANY,
+
+  /** Permission for a user to update their own embedders. */
+  UPDATE_EMBEDDER_OWN,
+
+  /** Permission for a user to update any embedder in the system. */
+  UPDATE_EMBEDDER_ANY,
+
+  /** Permission for a user to delete their own embedders. */
+  DELETE_EMBEDDER_OWN,
+
+  /** Permission for a user to delete any embedder in the system. */
+  DELETE_EMBEDDER_ANY,
+
+  /** Permission for a user to list their own embedders. */
+  LIST_EMBEDDER_OWN,
+
+  /** Permission for a user to list any embedder in the system. */
+  LIST_EMBEDDER_ANY,
+  
+  /** Permission to manage all embedder operations (create, update, delete, read, list). */
+  MANAGE_EMBEDDER;
 }

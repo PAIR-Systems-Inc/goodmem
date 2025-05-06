@@ -5,6 +5,9 @@ import com.goodmem.common.status.StatusOr;
 import com.goodmem.config.MinioConfig;
 import com.goodmem.security.AuthInterceptor;
 import com.goodmem.security.ConditionalAuthInterceptor;
+import com.goodmem.util.EnumConverters;
+import com.goodmem.util.RestMapper;
+import com.goodmem.util.RestMapper.NamingConvention;
 import com.google.common.base.Strings;
 import com.google.common.io.BaseEncoding;
 import com.google.common.io.ByteSource;
@@ -41,6 +44,14 @@ import goodmem.v1.SpaceServiceGrpc;
 import goodmem.v1.UserOuterClass.GetUserRequest;
 import goodmem.v1.UserOuterClass.User;
 import goodmem.v1.UserServiceGrpc;
+import goodmem.v1.EmbedderOuterClass.CreateEmbedderRequest;
+import goodmem.v1.EmbedderOuterClass.DeleteEmbedderRequest;
+import goodmem.v1.EmbedderOuterClass.Embedder;
+import goodmem.v1.EmbedderOuterClass.GetEmbedderRequest;
+import goodmem.v1.EmbedderOuterClass.ListEmbeddersRequest;
+import goodmem.v1.EmbedderOuterClass.ListEmbeddersResponse;
+import goodmem.v1.EmbedderOuterClass.UpdateEmbedderRequest;
+import goodmem.v1.EmbedderServiceGrpc;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
@@ -81,6 +92,7 @@ public class Main {
   private final UserServiceImpl userServiceImpl;
   private final MemoryServiceImpl memoryServiceImpl;
   private final ApiKeyServiceImpl apiKeyServiceImpl;
+  private final EmbedderServiceImpl embedderServiceImpl;
   private final HikariDataSource dataSource;
 
   private final MinioConfig minioConfig;
@@ -91,6 +103,7 @@ public class Main {
   private final UserServiceGrpc.UserServiceBlockingStub userService;
   private final MemoryServiceGrpc.MemoryServiceBlockingStub memoryService;
   private final ApiKeyServiceGrpc.ApiKeyServiceBlockingStub apiKeyService;
+  private final EmbedderServiceGrpc.EmbedderServiceBlockingStub embedderService;
 
   public Main() {
     // Initialize database connection pool
@@ -112,6 +125,8 @@ public class Main {
         new MemoryServiceImpl.Config(dataSource, minioConfig));
     this.apiKeyServiceImpl = new ApiKeyServiceImpl(
         new ApiKeyServiceImpl.Config(dataSource));
+    this.embedderServiceImpl = new EmbedderServiceImpl(
+        new EmbedderServiceImpl.Config(dataSource));
 
     // Create an in-process channel for REST-to-gRPC communication
     ManagedChannel channel = InProcessChannelBuilder.forName("in-process").build();
@@ -121,6 +136,7 @@ public class Main {
     this.userService = UserServiceGrpc.newBlockingStub(channel);
     this.memoryService = MemoryServiceGrpc.newBlockingStub(channel);
     this.apiKeyService = ApiKeyServiceGrpc.newBlockingStub(channel);
+    this.embedderService = EmbedderServiceGrpc.newBlockingStub(channel);
   }
 
   private record InitializedMinio(
@@ -235,6 +251,7 @@ public class Main {
             .addService(ServerInterceptors.intercept(userServiceImpl, new ConditionalAuthInterceptor(initMethodAuthorizer, authInterceptor)))
             .addService(ServerInterceptors.intercept(memoryServiceImpl, authInterceptor))
             .addService(ServerInterceptors.intercept(apiKeyServiceImpl, authInterceptor))
+            .addService(ServerInterceptors.intercept(embedderServiceImpl, authInterceptor))
             .addService(ProtoReflectionServiceV1.newInstance())
             .build()
             .start();
@@ -302,6 +319,13 @@ public class Main {
     app.get("/v1/apikeys", this::handleListApiKeys);
     app.put("/v1/apikeys/{id}", this::handleUpdateApiKey);
     app.delete("/v1/apikeys/{id}", this::handleDeleteApiKey);
+    
+    // Embedder endpoints
+    app.post("/v1/embedders", this::handleCreateEmbedder);
+    app.get("/v1/embedders/{id}", this::handleGetEmbedder);
+    app.get("/v1/embedders", this::handleListEmbedders);
+    app.put("/v1/embedders/{id}", this::handleUpdateEmbedder);
+    app.delete("/v1/embedders/{id}", this::handleDeleteEmbedder);
 
     Logger.info("REST server started, listening on port {}.", REST_PORT);
   }
@@ -348,7 +372,7 @@ public class Main {
     }
 
     Space response = spaceService.createSpace(requestBuilder.build());
-    ctx.json(protoToMap(response));
+    ctx.json(RestMapper.toJsonMap(response));
   }
 
   /**
@@ -374,7 +398,7 @@ public class Main {
         .build();
 
     Space response = spaceService.getSpace(request);
-    ctx.json(protoToMap(response));
+    ctx.json(RestMapper.toJsonMap(response));
   }
 
   private void handleListSpaces(Context ctx) {
@@ -403,7 +427,7 @@ public class Main {
     }
 
     ListSpacesResponse response = spaceService.listSpaces(requestBuilder.build());
-    ctx.json(Map.of("spaces", response.getSpacesList().stream().map(this::protoToMap).toList()));
+    ctx.json(Map.of("spaces", response.getSpacesList().stream().map(RestMapper::toJsonMap).toList()));
   }
 
   /**
@@ -454,7 +478,7 @@ public class Main {
     }
 
     Space response = spaceService.updateSpace(requestBuilder.build());
-    ctx.json(protoToMap(response));
+    ctx.json(RestMapper.toJsonMap(response));
   }
 
   /**
@@ -495,7 +519,7 @@ public class Main {
 
     User response = userService.getUser(
         GetUserRequest.newBuilder().setUserId(userIdOr.getValue()).build());
-    ctx.json(protoToMap(response));
+    ctx.json(RestMapper.toJsonMap(response));
   }
 
   // Memory handlers
@@ -538,7 +562,7 @@ public class Main {
     }
 
     Memory response = memoryService.createMemory(requestBuilder.build());
-    ctx.json(protoToMap(response));
+    ctx.json(RestMapper.toJsonMap(response));
   }
 
   /**
@@ -562,7 +586,7 @@ public class Main {
     Memory response = memoryService.getMemory(
         GetMemoryRequest.newBuilder().setMemoryId(memoryIdOr.getValue()).build()
     );
-    ctx.json(protoToMap(response));
+    ctx.json(RestMapper.toJsonMap(response));
   }
 
   /**
@@ -586,7 +610,7 @@ public class Main {
     ListMemoriesResponse response = memoryService.listMemories(
         ListMemoriesRequest.newBuilder().setSpaceId(spaceIdOr.getValue()).build());
     ctx.json(
-        Map.of("memories", response.getMemoriesList().stream().map(this::protoToMap).toList()));
+        Map.of("memories", response.getMemoriesList().stream().map(RestMapper::toJsonMap).toList()));
   }
 
   /**
@@ -638,8 +662,8 @@ public class Main {
 
     CreateApiKeyResponse response = apiKeyService.createApiKey(requestBuilder.build());
     Map<String, Object> responseMap = new HashMap<>();
-    responseMap.put("api_key_metadata", protoToMap(response.getApiKeyMetadata()));
-    responseMap.put("raw_api_key", response.getRawApiKey());
+    responseMap.put("apiKeyMetadata", RestMapper.toJsonMap(response.getApiKeyMetadata()));
+    responseMap.put("rawApiKey", response.getRawApiKey());
     ctx.json(responseMap);
   }
 
@@ -656,7 +680,7 @@ public class Main {
     ListApiKeysRequest request = ListApiKeysRequest.newBuilder().build();
 
     ListApiKeysResponse response = apiKeyService.listApiKeys(request);
-    ctx.json(Map.of("keys", response.getKeysList().stream().map(this::protoToMap).toList()));
+    ctx.json(Map.of("keys", response.getKeysList().stream().map(RestMapper::toJsonMap).toList()));
   }
 
   /**
@@ -706,7 +730,7 @@ public class Main {
     }
 
     ApiKey response = apiKeyService.updateApiKey(requestBuilder.build());
-    ctx.json(protoToMap(response));
+    ctx.json(RestMapper.toJsonMap(response));
   }
 
   /**
@@ -727,6 +751,284 @@ public class Main {
     }
     apiKeyService.deleteApiKey(
         DeleteApiKeyRequest.newBuilder().setApiKeyId(apiKeyIdOr.getValue()).build());
+    ctx.status(204);
+  }
+
+  // Embedder handlers
+  
+  /**
+   * Handles a REST request to create a new Embedder.
+   * Builds the create request from JSON and calls the gRPC service.
+   *
+   * @param ctx The Javalin context containing the request and response
+   */
+  private void handleCreateEmbedder(Context ctx) {
+    String apiKey = ctx.header("x-api-key");
+    Logger.info("REST CreateEmbedder request with API key: {}", apiKey);
+
+    CreateEmbedderRequest.Builder requestBuilder = CreateEmbedderRequest.newBuilder();
+    Map<String, Object> json = ctx.bodyAsClass(Map.class);
+
+    if (json.containsKey("display_name")) {
+      requestBuilder.setDisplayName((String) json.get("display_name"));
+    }
+
+    if (json.containsKey("description")) {
+      requestBuilder.setDescription((String) json.get("description"));
+    }
+
+    if (json.containsKey("provider_type")) {
+      String providerTypeStr = (String) json.get("provider_type");
+      goodmem.v1.EmbedderOuterClass.ProviderType providerType = EnumConverters.providerTypeFromString(providerTypeStr);
+      requestBuilder.setProviderType(providerType);
+    }
+
+    if (json.containsKey("endpoint_url")) {
+      requestBuilder.setEndpointUrl((String) json.get("endpoint_url"));
+    }
+
+    if (json.containsKey("api_path")) {
+      requestBuilder.setApiPath((String) json.get("api_path"));
+    }
+
+    if (json.containsKey("model_identifier")) {
+      requestBuilder.setModelIdentifier((String) json.get("model_identifier"));
+    }
+
+    if (json.containsKey("dimensionality")) {
+      if (json.get("dimensionality") instanceof Number) {
+        requestBuilder.setDimensionality(((Number) json.get("dimensionality")).intValue());
+      }
+    }
+
+    if (json.containsKey("max_sequence_length")) {
+      if (json.get("max_sequence_length") instanceof Number) {
+        requestBuilder.setMaxSequenceLength(((Number) json.get("max_sequence_length")).intValue());
+      }
+    }
+
+    if (json.containsKey("supported_modalities") && json.get("supported_modalities") instanceof Iterable) {
+      @SuppressWarnings("unchecked")
+      Iterable<String> modalityStrings = (Iterable<String>) json.get("supported_modalities");
+      for (String modalityStr : modalityStrings) {
+        goodmem.v1.EmbedderOuterClass.Modality modality = EnumConverters.modalityFromString(modalityStr);
+        if (modality != goodmem.v1.EmbedderOuterClass.Modality.MODALITY_UNSPECIFIED) {
+          requestBuilder.addSupportedModalities(modality);
+        }
+      }
+    }
+
+    if (json.containsKey("credentials")) {
+      requestBuilder.setCredentials((String) json.get("credentials"));
+    }
+
+    if (json.containsKey("labels") && json.get("labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> labels = (Map<String, String>) json.get("labels");
+      requestBuilder.putAllLabels(labels);
+    }
+
+    if (json.containsKey("version")) {
+      requestBuilder.setVersion((String) json.get("version"));
+    }
+
+    if (json.containsKey("monitoring_endpoint")) {
+      requestBuilder.setMonitoringEndpoint((String) json.get("monitoring_endpoint"));
+    }
+
+    if (json.containsKey("owner_id")) {
+      StatusOr<ByteString> ownerIdOr = convertHexToUuidBytes((String) json.get("owner_id"));
+      if (ownerIdOr.isOk()) {
+        requestBuilder.setOwnerId(ownerIdOr.getValue());
+      }
+    }
+
+    Embedder response = embedderService.createEmbedder(requestBuilder.build());
+    ctx.json(RestMapper.toJsonMap(response));
+  }
+
+  /**
+   * Handles a REST request to retrieve an Embedder by ID.
+   * Converts the hex UUID to binary format and calls the gRPC service.
+   *
+   * @param ctx The Javalin context containing the request and response
+   */
+  private void handleGetEmbedder(Context ctx) {
+    String embedderIdHex = ctx.pathParam("id");
+    String apiKey = ctx.header("x-api-key");
+    Logger.info("REST GetEmbedder request for ID: {} with API key: {}", embedderIdHex, apiKey);
+
+    StatusOr<ByteString> embedderIdOr = convertHexToUuidBytes(embedderIdHex);
+    if (embedderIdOr.isNotOk()) {
+      setError(ctx, 400, "Invalid embedder ID format");
+      return;
+    }
+
+    Embedder response = embedderService.getEmbedder(
+        GetEmbedderRequest.newBuilder().setEmbedderId(embedderIdOr.getValue()).build()
+    );
+    ctx.json(RestMapper.toJsonMap(response));
+  }
+
+  /**
+   * Handles a REST request to list Embedders with optional filters.
+   * Builds the list request from query parameters and calls the gRPC service.
+   *
+   * @param ctx The Javalin context containing the request and response
+   */
+  private void handleListEmbedders(Context ctx) {
+    String apiKey = ctx.header("x-api-key");
+    Logger.info("REST ListEmbedders request with API key: {}", apiKey);
+
+    ListEmbeddersRequest.Builder requestBuilder = ListEmbeddersRequest.newBuilder();
+
+    // Handle owner_id filter if provided
+    if (ctx.queryParam("owner_id") != null) {
+      StatusOr<ByteString> ownerIdOr = convertHexToUuidBytes(ctx.queryParam("owner_id"));
+      if (ownerIdOr.isOk()) {
+        requestBuilder.setOwnerId(ownerIdOr.getValue());
+      }
+    }
+
+    // Handle provider_type filter if provided
+    if (ctx.queryParam("provider_type") != null) {
+      String providerTypeStr = ctx.queryParam("provider_type");
+      goodmem.v1.EmbedderOuterClass.ProviderType providerType = EnumConverters.providerTypeFromString(providerTypeStr);
+      if (providerType != goodmem.v1.EmbedderOuterClass.ProviderType.PROVIDER_TYPE_UNSPECIFIED) {
+        requestBuilder.setProviderType(providerType);
+      }
+    }
+
+    // Handle label selectors from query parameters
+    ctx.queryParamMap()
+        .forEach(
+            (key, values) -> {
+              if (key.startsWith("label.") && !values.isEmpty()) {
+                String labelKey = key.substring("label.".length());
+                requestBuilder.putLabelSelectors(labelKey, values.getFirst());
+              }
+            });
+
+    ListEmbeddersResponse response = embedderService.listEmbedders(requestBuilder.build());
+    ctx.json(Map.of("embedders", response.getEmbeddersList().stream().map(RestMapper::toJsonMap).toList()));
+  }
+
+  /**
+   * Handles a REST request to update an Embedder by ID.
+   * Converts the hex UUID to binary format, builds the update request from JSON,
+   * and calls the gRPC service.
+   *
+   * @param ctx The Javalin context containing the request and response
+   */
+  private void handleUpdateEmbedder(Context ctx) {
+    String embedderIdHex = ctx.pathParam("id");
+    String apiKey = ctx.header("x-api-key");
+    Logger.info("REST UpdateEmbedder request for ID: {} with API key: {}", embedderIdHex, apiKey);
+
+    StatusOr<ByteString> embedderIdOr = convertHexToUuidBytes(embedderIdHex);
+    if (embedderIdOr.isNotOk()) {
+      setError(ctx, 400, "Invalid embedder ID format");
+      return;
+    }
+
+    UpdateEmbedderRequest.Builder requestBuilder = 
+        UpdateEmbedderRequest.newBuilder().setEmbedderId(embedderIdOr.getValue());
+
+    Map<String, Object> json = ctx.bodyAsClass(Map.class);
+
+    if (json.containsKey("display_name")) {
+      requestBuilder.setDisplayName((String) json.get("display_name"));
+    }
+
+    if (json.containsKey("description")) {
+      requestBuilder.setDescription((String) json.get("description"));
+    }
+
+    if (json.containsKey("endpoint_url")) {
+      requestBuilder.setEndpointUrl((String) json.get("endpoint_url"));
+    }
+
+    if (json.containsKey("api_path")) {
+      requestBuilder.setApiPath((String) json.get("api_path"));
+    }
+
+    if (json.containsKey("model_identifier")) {
+      requestBuilder.setModelIdentifier((String) json.get("model_identifier"));
+    }
+
+    if (json.containsKey("dimensionality")) {
+      if (json.get("dimensionality") instanceof Number) {
+        requestBuilder.setDimensionality(((Number) json.get("dimensionality")).intValue());
+      }
+    }
+
+    if (json.containsKey("max_sequence_length")) {
+      if (json.get("max_sequence_length") instanceof Number) {
+        requestBuilder.setMaxSequenceLength(((Number) json.get("max_sequence_length")).intValue());
+      }
+    }
+
+    if (json.containsKey("supported_modalities") && json.get("supported_modalities") instanceof Iterable) {
+      @SuppressWarnings("unchecked")
+      Iterable<String> modalityStrings = (Iterable<String>) json.get("supported_modalities");
+      for (String modalityStr : modalityStrings) {
+        goodmem.v1.EmbedderOuterClass.Modality modality = EnumConverters.modalityFromString(modalityStr);
+        if (modality != goodmem.v1.EmbedderOuterClass.Modality.MODALITY_UNSPECIFIED) {
+          requestBuilder.addSupportedModalities(modality);
+        }
+      }
+    }
+
+    if (json.containsKey("credentials")) {
+      requestBuilder.setCredentials((String) json.get("credentials"));
+    }
+
+    if (json.containsKey("version")) {
+      requestBuilder.setVersion((String) json.get("version"));
+    }
+
+    if (json.containsKey("monitoring_endpoint")) {
+      requestBuilder.setMonitoringEndpoint((String) json.get("monitoring_endpoint"));
+    }
+
+    // Handle label update strategy (replace_labels or merge_labels)
+    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> labels = (Map<String, String>) json.get("replace_labels");
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(labels);
+      requestBuilder.setReplaceLabels(labelsBuilder.build());
+    } else if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
+      @SuppressWarnings("unchecked")
+      Map<String, String> labels = (Map<String, String>) json.get("merge_labels");
+      StringMap.Builder labelsBuilder = StringMap.newBuilder();
+      labelsBuilder.putAllLabels(labels);
+      requestBuilder.setMergeLabels(labelsBuilder.build());
+    }
+
+    Embedder response = embedderService.updateEmbedder(requestBuilder.build());
+    ctx.json(RestMapper.toJsonMap(response));
+  }
+
+  /**
+   * Handles a REST request to delete an Embedder by ID.
+   * Converts the hex UUID to binary format and calls the gRPC service.
+   *
+   * @param ctx The Javalin context containing the request and response
+   */
+  private void handleDeleteEmbedder(Context ctx) {
+    String embedderIdHex = ctx.pathParam("id");
+    String apiKey = ctx.header("x-api-key");
+    Logger.info("REST DeleteEmbedder request for ID: {} with API key: {}", embedderIdHex, apiKey);
+
+    StatusOr<ByteString> embedderIdOr = convertHexToUuidBytes(embedderIdHex);
+    if (embedderIdOr.isNotOk()) {
+      setError(ctx, 400, "Invalid embedder ID format");
+      return;
+    }
+    
+    embedderService.deleteEmbedder(
+        DeleteEmbedderRequest.newBuilder().setEmbedderId(embedderIdOr.getValue()).build());
     ctx.status(204);
   }
 
@@ -792,6 +1094,35 @@ public class Main {
     map.put("updated_at", Timestamps.toMillis(apiKey.getUpdatedAt()));
     map.put("created_by_id", Uuids.bytesToHex(apiKey.getCreatedById().toByteArray()));
     map.put("updated_by_id", Uuids.bytesToHex(apiKey.getUpdatedById().toByteArray()));
+    return map;
+  }
+  
+  private Map<String, Object> protoToMap(Embedder embedder) {
+    Map<String, Object> map = new HashMap<>();
+    map.put("embedder_id", Uuids.bytesToHex(embedder.getEmbedderId().toByteArray()));
+    map.put("display_name", embedder.getDisplayName());
+    map.put("description", embedder.getDescription());
+    map.put("provider_type", embedder.getProviderType().name());
+    map.put("endpoint_url", embedder.getEndpointUrl());
+    map.put("api_path", embedder.getApiPath());
+    map.put("model_identifier", embedder.getModelIdentifier());
+    map.put("dimensionality", embedder.getDimensionality());
+    
+    if (embedder.hasMaxSequenceLength()) {
+      map.put("max_sequence_length", embedder.getMaxSequenceLength());
+    }
+    
+    map.put("supported_modalities", embedder.getSupportedModalitiesList().stream()
+        .map(Enum::name)
+        .toList());
+    map.put("labels", embedder.getLabelsMap());
+    map.put("version", embedder.getVersion());
+    map.put("monitoring_endpoint", embedder.getMonitoringEndpoint());
+    map.put("owner_id", Uuids.bytesToHex(embedder.getOwnerId().toByteArray()));
+    map.put("created_at", Timestamps.toMillis(embedder.getCreatedAt()));
+    map.put("updated_at", Timestamps.toMillis(embedder.getUpdatedAt()));
+    map.put("created_by_id", Uuids.bytesToHex(embedder.getCreatedById().toByteArray()));
+    map.put("updated_by_id", Uuids.bytesToHex(embedder.getUpdatedById().toByteArray()));
     return map;
   }
 
