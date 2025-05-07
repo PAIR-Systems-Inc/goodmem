@@ -73,6 +73,7 @@ func (SortOrder) EnumDescriptor() ([]byte, []int) {
 
 // A wrapper message for string-to-string maps
 // Used to wrap maps when they need to be placed in a oneof field
+// Used for label operations across multiple services
 type StringMap struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Labels        map[string]string      `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
