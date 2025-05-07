@@ -2,8 +2,7 @@ package com.goodmem.db;
 
 import com.goodmem.db.util.DbUtil;
 import com.goodmem.db.util.UuidUtil;
-import goodmem.v1.EmbedderOuterClass.Modality;
-import goodmem.v1.EmbedderOuterClass.ProviderType;
+import com.goodmem.util.EnumConverters;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -63,7 +62,7 @@ public record Embedder(
         goodmem.v1.EmbedderOuterClass.Embedder.newBuilder()
             .setEmbedderId(UuidUtil.toProtoBytes(embedderId))
             .setDisplayName(displayName)
-            .setProviderType(convertProviderTypeToProto(providerType))
+            .setProviderType(EnumConverters.toProtoProviderType(providerType))
             .setEndpointUrl(endpointUrl)
             .setApiPath(apiPath)
             .setModelIdentifier(modelIdentifier)
@@ -85,7 +84,7 @@ public record Embedder(
 
     if (supportedModalities != null && !supportedModalities.isEmpty()) {
       supportedModalities.forEach(
-          modality -> builder.addSupportedModalities(convertModalityToProto(modality)));
+          modality -> builder.addSupportedModalities(EnumConverters.toProtoModality(modality)));
     }
 
     if (credentials != null) {
@@ -106,37 +105,5 @@ public record Embedder(
     }
 
     return builder.build();
-  }
-
-  /**
-   * Converts Java enum to Proto enum for Provider Type.
-   *
-   * @param providerType The Java ProviderType enum
-   * @return The Proto ProviderType enum
-   */
-  private ProviderType convertProviderTypeToProto(
-      EmbedderProviderType providerType) {
-    return switch (providerType) {
-      case OPENAI -> ProviderType.PROVIDER_TYPE_OPENAI;
-      case VLLM -> ProviderType.PROVIDER_TYPE_VLLM;
-      case TEI -> ProviderType.PROVIDER_TYPE_TEI;
-      default -> ProviderType.PROVIDER_TYPE_UNSPECIFIED;
-    };
-  }
-
-  /**
-   * Converts Java enum to Proto enum for Modality.
-   *
-   * @param modality The Java Modality enum
-   * @return The Proto Modality enum
-   */
-  private Modality convertModalityToProto(EmbedderModality modality) {
-    return switch (modality) {
-      case TEXT -> Modality.MODALITY_TEXT;
-      case IMAGE -> Modality.MODALITY_IMAGE;
-      case AUDIO -> Modality.MODALITY_AUDIO;
-      case VIDEO -> Modality.MODALITY_VIDEO;
-      default -> Modality.MODALITY_UNSPECIFIED;
-    };
   }
 }

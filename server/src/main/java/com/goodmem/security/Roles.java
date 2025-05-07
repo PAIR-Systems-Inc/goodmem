@@ -97,7 +97,12 @@ public enum Roles {
           Permission.DISPLAY_SPACE_OWN,
           Permission.UPDATE_SPACE_OWN,
           Permission.DELETE_SPACE_OWN,
-          Permission.LIST_SPACE_OWN) {
+          Permission.LIST_SPACE_OWN,
+          Permission.CREATE_EMBEDDER_OWN,
+          Permission.READ_EMBEDDER_OWN,
+          Permission.UPDATE_EMBEDDER_OWN,
+          Permission.DELETE_EMBEDDER_OWN,
+          Permission.LIST_EMBEDDER_OWN) {
         @Override
         public String getName() {
           return "USER";
