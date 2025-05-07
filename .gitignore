@@ -3,6 +3,8 @@ dist/
 **/bin/
 **/target/
 cli/Dockerfile.protogen
+cli/cli
+cli/goodmem-cli
 
 # Go
 **/vendor/
