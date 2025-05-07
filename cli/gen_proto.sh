@@ -60,7 +60,8 @@ docker run --rm \
            /proto/goodmem/v1/space.proto \
            /proto/goodmem/v1/user.proto \
            /proto/goodmem/v1/memory.proto \
-           /proto/goodmem/v1/apikey.proto && \
+           /proto/goodmem/v1/apikey.proto \
+           /proto/goodmem/v1/embedder.proto && \
            chmod -R 777 /output/*"
 
 # Fix any possible permissions
