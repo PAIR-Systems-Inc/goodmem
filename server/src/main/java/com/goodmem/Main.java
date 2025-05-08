@@ -29,6 +29,7 @@ import goodmem.v1.Apikey.DeleteApiKeyRequest;
 import goodmem.v1.Apikey.ListApiKeysRequest;
 import goodmem.v1.Apikey.ListApiKeysResponse;
 import goodmem.v1.Apikey.UpdateApiKeyRequest;
+import goodmem.v1.Common;
 import goodmem.v1.Common.StringMap;
 import goodmem.v1.EmbedderOuterClass.CreateEmbedderRequest;
 import goodmem.v1.EmbedderOuterClass.DeleteEmbedderRequest;
@@ -90,6 +91,7 @@ import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.tinylog.Logger;
@@ -398,7 +400,7 @@ public class Main {
                             "/v1/spaces",
                             () -> {
                               post(this::handleCreateSpace);
-//                              get(this::handleListSpaces);
+                              get(this::handleListSpaces);
                               path(
                                   "{id}",
                                   () -> {
@@ -533,15 +535,17 @@ public class Main {
     var requestBuilder = SpaceOuterClass.CreateSpaceRequest.newBuilder();
     
     // Set the name if provided
-    if (requestDto.name() != null) {
+    if (!Strings.isNullOrEmpty(requestDto.name())) {
       requestBuilder.setName(requestDto.name());
     }
 
     // Convert and set the embedder ID if provided
-    if (requestDto.embedderId() != null) {
+    if (!Strings.isNullOrEmpty(requestDto.embedderId())) {
       StatusOr<ByteString> embedderIdOr = convertHexToUuidBytes(requestDto.embedderId());
       if (embedderIdOr.isOk()) {
         requestBuilder.setEmbedderId(embedderIdOr.getValue());
+      } else {
+        Logger.warn("Invalid embedder ID format: {}", requestDto.embedderId());
       }
     }
 
@@ -556,10 +560,12 @@ public class Main {
     }
     
     // Set owner ID if provided
-    if (requestDto.ownerId() != null) {
+    if (!Strings.isNullOrEmpty(requestDto.ownerId())) {
       StatusOr<ByteString> ownerIdOr = convertHexToUuidBytes(requestDto.ownerId());
       if (ownerIdOr.isOk()) {
         requestBuilder.setOwnerId(ownerIdOr.getValue());
+      } else {
+        Logger.warn("Invalid owner ID format: {}", requestDto.ownerId());
       }
     }
 
@@ -628,8 +634,11 @@ public class Main {
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST GetSpace request for ID: {} with API key: {}", spaceIdHex, apiKey);
 
-    // Validate the spaceId
-    StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
+    // Create the DTO from path parameter
+    com.goodmem.rest.dto.GetSpaceRequest requestDto = new com.goodmem.rest.dto.GetSpaceRequest(spaceIdHex);
+    
+    // Validate and convert the spaceId
+    StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(requestDto.spaceId());
     if (spaceIdOr.isNotOk()) {
       setError(ctx, 400, "Invalid space ID format");
       return;
@@ -660,33 +669,190 @@ public class Main {
     ctx.json(responseDto);
   }
 
+  @OpenApi(
+      path = "/v1/spaces",
+      methods = { HttpMethod.GET },
+      summary = "List spaces",
+      description = "Retrieves a list of spaces accessible to the caller, with optional filtering by owner, labels, and name. Results are paginated with a maximum number of spaces per response.",
+      operationId = "listSpaces",
+      tags = "Spaces",
+      queryParams = {
+          @io.javalin.openapi.OpenApiParam(
+              name = "owner_id",
+              description = "Filter spaces by owner ID. If not provided, shows spaces based on permissions.",
+              required = false,
+              type = String.class,
+              example = "550e8400-e29b-41d4-a716-446655440000"),
+          @io.javalin.openapi.OpenApiParam(
+              name = "name_filter", 
+              description = "Filter spaces by name using glob pattern matching",
+              required = false,
+              type = String.class,
+              example = "Research*"),
+          @io.javalin.openapi.OpenApiParam(
+              name = "max_results",
+              description = "Maximum number of results to return in a single page",
+              required = false,
+              type = Integer.class,
+              example = "20"),
+          @io.javalin.openapi.OpenApiParam(
+              name = "next_token",
+              description = "Pagination token for retrieving the next set of results",
+              required = false,
+              type = String.class,
+              example = "eyJzdGFydCI6MjAsIm93bmVySWQiOiJiMzMwM2QwYS0..."),
+          @io.javalin.openapi.OpenApiParam(
+              name = "sort_by",
+              description = "Field to sort by. Supported values: \"created_time\", \"name\", \"updated_time\"",
+              required = false,
+              type = String.class,
+              example = "name"),
+          @io.javalin.openapi.OpenApiParam(
+              name = "sort_order",
+              description = "Sort order (ASCENDING or DESCENDING)",
+              required = false,
+              type = String.class,
+              example = "ASCENDING"),
+          @io.javalin.openapi.OpenApiParam(
+              name = "label.*",
+              description = "Filter by label value. Multiple label filters can be specified (e.g., ?label.project=AI&label.team=NLP)",
+              required = false,
+              type = String.class,
+              example = "?label.project=AI&label.team=NLP")
+      },
+      responses = {
+          @OpenApiResponse(
+              status = "200",
+              description = "Successfully retrieved spaces",
+              content = @OpenApiContent(from = ListSpacesResponse.class)),
+          @OpenApiResponse(
+              status = "400",
+              description = "Invalid request - invalid filter parameters or pagination token"),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to list spaces")
+      })
+  /**
+   * Handles a REST request to list spaces with optional filtering and pagination. Converts query
+   * parameters to the gRPC request format and calls the gRPC service.
+   *
+   * @param ctx The Javalin context containing the request and response
+   */
   private void handleListSpaces(Context ctx) {
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST ListSpaces request with API key: {}", apiKey);
 
-    ListSpacesRequest.Builder requestBuilder = ListSpacesRequest.newBuilder();
-
-    // Handle label selectors from query parameters
-    ctx.queryParamMap()
-        .forEach(
-            (key, values) -> {
-              if (key.startsWith("label.") && !values.isEmpty()) {
-                String labelKey = key.substring("label.".length());
-                requestBuilder.putLabelSelectors(labelKey, values.getFirst());
-              }
-            });
-
-    // Handle owner_id filter if provided
-    if (ctx.queryParam("owner_id") != null) {
-      StatusOr<ByteString> ownerIdOr = convertHexToUuidBytes(ctx.queryParam("owner_id"));
-      if (ownerIdOr.isOk()) {
-        requestBuilder.setOwnerId(ownerIdOr.getValue());
+    // Extract query parameters and create request DTO
+    Map<String, String> labelSelectors = new HashMap<>();
+    ctx.queryParamMap().forEach((key, values) -> {
+      if (key.startsWith("label.") && !values.isEmpty()) {
+        String labelKey = key.substring("label.".length());
+        String value = values.getFirst();
+        if (value != null) {
+          labelSelectors.put(labelKey, value);
+        }
+      }
+    });
+    
+    // Parse max_results as Integer if provided
+    Integer maxResults = null;
+    String maxResultsStr = ctx.queryParam("max_results");
+    if (!Strings.isNullOrEmpty(maxResultsStr)) {
+      try {
+        maxResults = Integer.parseInt(maxResultsStr);
+      } catch (NumberFormatException e) {
+        Logger.warn("Invalid max_results parameter: {}", maxResultsStr);
       }
     }
+    
+    // Parse sort_order if provided
+    String sortOrderStr = ctx.queryParam("sort_order");
+    
+    // Create the DTO from query parameters
+    com.goodmem.rest.dto.ListSpacesRequest requestDto = new com.goodmem.rest.dto.ListSpacesRequest(
+        ctx.queryParam("owner_id"),
+        labelSelectors.isEmpty() ? null : labelSelectors,
+        ctx.queryParam("name_filter"),
+        maxResults,
+        ctx.queryParam("next_token"),
+        ctx.queryParam("sort_by"),
+        sortOrderStr
+    );
+    
+    // Convert the DTO to gRPC request
+    SpaceOuterClass.ListSpacesRequest.Builder requestBuilder = SpaceOuterClass.ListSpacesRequest.newBuilder();
+    
+    // Set the owner_id if provided
+    if (!Strings.isNullOrEmpty(requestDto.ownerId())) {
+      StatusOr<ByteString> ownerIdOr = convertHexToUuidBytes(requestDto.ownerId());
+      if (ownerIdOr.isOk()) {
+        requestBuilder.setOwnerId(ownerIdOr.getValue());
+      } else {
+        Logger.warn("Invalid owner_id format: {}", requestDto.ownerId());
+      }
+    }
+    
+    // Add label selectors
+    if (requestDto.labelSelectors() != null && !requestDto.labelSelectors().isEmpty()) {
+      requestDto.labelSelectors().forEach(requestBuilder::putLabelSelectors);
+    }
+    
+    // Set the name filter if provided
+    if (!Strings.isNullOrEmpty(requestDto.nameFilter())) {
+      requestBuilder.setNameFilter(requestDto.nameFilter());
+    }
+    
+    // Set pagination parameters
+    if (requestDto.maxResults() != null) {
+      requestBuilder.setMaxResults(requestDto.maxResults());
+    }
+    
+    if (!Strings.isNullOrEmpty(requestDto.nextToken())) {
+      requestBuilder.setNextToken(requestDto.nextToken());
+    }
+    
+    // Set sorting parameters
+    if (!Strings.isNullOrEmpty(requestDto.sortBy())) {
+      requestBuilder.setSortBy(requestDto.sortBy());
+    }
+    
+    // Set sort order if provided
+    if (!Strings.isNullOrEmpty(requestDto.sortOrder())) {
+      requestBuilder.setSortOrder(requestDto.getSortOrderEnum());
+    }
 
-    ListSpacesResponse response = spaceService.listSpaces(requestBuilder.build());
-    ctx.json(
-        Map.of("spaces", response.getSpacesList().stream().map(RestMapper::toJsonMap).toList()));
+    // Call the gRPC service
+    SpaceOuterClass.ListSpacesResponse response = spaceService.listSpaces(requestBuilder.build());
+    
+    // Convert the response to a list of Space DTOs
+    List<Space> spaces = response.getSpacesList().stream()
+        .map(space -> {
+          Map<String, Object> spaceMap = RestMapper.toJsonMap(space);
+          return new Space(
+              (String) spaceMap.get("space_id"),
+              (String) spaceMap.get("name"),
+              (Map<String, String>) spaceMap.get("labels"),
+              (String) spaceMap.get("embedder_id"),
+              (Long) spaceMap.get("created_at"),
+              (Long) spaceMap.get("updated_at"),
+              (String) spaceMap.get("owner_id"),
+              (String) spaceMap.get("created_by_id"),
+              (String) spaceMap.get("updated_by_id"),
+              (Boolean) spaceMap.get("public_read")
+          );
+        })
+        .toList();
+    
+    // Create and return the ListSpacesResponse DTO
+    com.goodmem.rest.dto.ListSpacesResponse responseDto = new com.goodmem.rest.dto.ListSpacesResponse(
+        spaces,
+        response.hasNextToken() ? response.getNextToken() : null
+    );
+    
+    ctx.json(responseDto);
   }
 
   /**
