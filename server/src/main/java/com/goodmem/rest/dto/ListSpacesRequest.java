@@ -54,7 +54,7 @@ public record ListSpacesRequest(
     @OpenApiDescription("Sort order (ASCENDING or DESCENDING).")
     @OpenApiExample("ASCENDING")
     @OpenApiNullable
-    String sortOrder
+    SortOrder sortOrder
 ) {
     /**
      * Empty constructor that creates an empty request with null values.
@@ -62,14 +62,5 @@ public record ListSpacesRequest(
      */
     public ListSpacesRequest() {
         this(null, null, null, null, null, null, null);
-    }
-    
-    /**
-     * Gets the sort order as an enum value.
-     * 
-     * @return The SortOrder enum value, or SORT_ORDER_UNSPECIFIED if null or invalid
-     */
-    public SortOrder getSortOrderEnum() {
-        return SortOrder.fromString(sortOrder);
     }
 }

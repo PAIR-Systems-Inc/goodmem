@@ -779,7 +779,7 @@ public class Main {
         maxResults,
         ctx.queryParam("next_token"),
         ctx.queryParam("sort_by"),
-        sortOrderStr
+        com.goodmem.rest.dto.SortOrder.fromString(sortOrderStr)
     );
     
     // Convert the DTO to gRPC request
@@ -820,8 +820,8 @@ public class Main {
     }
     
     // Set sort order if provided
-    if (!Strings.isNullOrEmpty(requestDto.sortOrder())) {
-      requestBuilder.setSortOrder(requestDto.getSortOrderEnum().toProtoSortOrder());
+    if (requestDto.sortOrder() != null) {
+      requestBuilder.setSortOrder(requestDto.sortOrder().toProtoSortOrder());
     }
 
     // Call the gRPC service
