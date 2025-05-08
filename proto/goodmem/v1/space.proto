@@ -71,7 +71,7 @@ message ListSpacesRequest {
 
 message ListSpacesResponse {
   repeated Space spaces = 1;                 // Page of results
-  string next_token = 2;                     // Token for next page (or empty)
+  optional string next_token = 2;            // Token for next page (or empty)
 }
 
 // Internal serialization of this message produces the next_token

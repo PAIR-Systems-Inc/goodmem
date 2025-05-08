@@ -1,13 +1,17 @@
 package com.goodmem;
 
+import static io.javalin.apibuilder.ApiBuilder.*;
+import static io.javalin.apibuilder.ApiBuilder.post;
+
 import com.goodmem.common.status.Status;
 import com.goodmem.common.status.StatusOr;
 import com.goodmem.config.MinioConfig;
+import com.goodmem.rest.dto.CreateSpaceRequest;
+import com.goodmem.rest.dto.Space;
 import com.goodmem.security.AuthInterceptor;
 import com.goodmem.security.ConditionalAuthInterceptor;
 import com.goodmem.util.EnumConverters;
 import com.goodmem.util.RestMapper;
-import com.goodmem.util.RestMapper.NamingConvention;
 import com.google.common.base.Strings;
 import com.google.common.io.BaseEncoding;
 import com.google.common.io.ByteSource;
@@ -25,25 +29,7 @@ import goodmem.v1.Apikey.DeleteApiKeyRequest;
 import goodmem.v1.Apikey.ListApiKeysRequest;
 import goodmem.v1.Apikey.ListApiKeysResponse;
 import goodmem.v1.Apikey.UpdateApiKeyRequest;
-import goodmem.v1.MemoryOuterClass.CreateMemoryRequest;
-import goodmem.v1.MemoryOuterClass.DeleteMemoryRequest;
-import goodmem.v1.MemoryOuterClass.GetMemoryRequest;
-import goodmem.v1.MemoryOuterClass.ListMemoriesRequest;
-import goodmem.v1.MemoryOuterClass.ListMemoriesResponse;
-import goodmem.v1.MemoryOuterClass.Memory;
-import goodmem.v1.MemoryServiceGrpc;
-import goodmem.v1.SpaceOuterClass.CreateSpaceRequest;
-import goodmem.v1.SpaceOuterClass.DeleteSpaceRequest;
-import goodmem.v1.SpaceOuterClass.GetSpaceRequest;
-import goodmem.v1.SpaceOuterClass.ListSpacesRequest;
-import goodmem.v1.SpaceOuterClass.ListSpacesResponse;
-import goodmem.v1.SpaceOuterClass.Space;
 import goodmem.v1.Common.StringMap;
-import goodmem.v1.SpaceOuterClass.UpdateSpaceRequest;
-import goodmem.v1.SpaceServiceGrpc;
-import goodmem.v1.UserOuterClass.GetUserRequest;
-import goodmem.v1.UserOuterClass.User;
-import goodmem.v1.UserServiceGrpc;
 import goodmem.v1.EmbedderOuterClass.CreateEmbedderRequest;
 import goodmem.v1.EmbedderOuterClass.DeleteEmbedderRequest;
 import goodmem.v1.EmbedderOuterClass.Embedder;
@@ -52,6 +38,23 @@ import goodmem.v1.EmbedderOuterClass.ListEmbeddersRequest;
 import goodmem.v1.EmbedderOuterClass.ListEmbeddersResponse;
 import goodmem.v1.EmbedderOuterClass.UpdateEmbedderRequest;
 import goodmem.v1.EmbedderServiceGrpc;
+import goodmem.v1.MemoryOuterClass.CreateMemoryRequest;
+import goodmem.v1.MemoryOuterClass.DeleteMemoryRequest;
+import goodmem.v1.MemoryOuterClass.GetMemoryRequest;
+import goodmem.v1.MemoryOuterClass.ListMemoriesRequest;
+import goodmem.v1.MemoryOuterClass.ListMemoriesResponse;
+import goodmem.v1.MemoryOuterClass.Memory;
+import goodmem.v1.MemoryServiceGrpc;
+import goodmem.v1.SpaceOuterClass;
+import goodmem.v1.SpaceOuterClass.DeleteSpaceRequest;
+import goodmem.v1.SpaceOuterClass.GetSpaceRequest;
+import goodmem.v1.SpaceOuterClass.ListSpacesRequest;
+import goodmem.v1.SpaceOuterClass.ListSpacesResponse;
+import goodmem.v1.SpaceOuterClass.UpdateSpaceRequest;
+import goodmem.v1.SpaceServiceGrpc;
+import goodmem.v1.UserOuterClass.GetUserRequest;
+import goodmem.v1.UserOuterClass.User;
+import goodmem.v1.UserServiceGrpc;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
@@ -62,15 +65,16 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
-import java.io.IOException;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
-import java.sql.Connection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-
+import io.javalin.openapi.HttpMethod;
+import io.javalin.openapi.OpenApi;
+import io.javalin.openapi.OpenApiContent;
+import io.javalin.openapi.OpenApiInfo;
+import io.javalin.openapi.OpenApiRequestBody;
+import io.javalin.openapi.OpenApiResponse;
+import io.javalin.openapi.OpenApiServer;
+import io.javalin.openapi.plugin.OpenApiPlugin;
+import io.javalin.openapi.plugin.redoc.ReDocPlugin;
+import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
 import io.javalin.plugin.bundled.CorsPluginConfig.CorsRule;
 import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
@@ -81,6 +85,13 @@ import io.minio.errors.InternalException;
 import io.minio.errors.InvalidResponseException;
 import io.minio.errors.ServerException;
 import io.minio.errors.XmlParserException;
+import java.io.IOException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.sql.Connection;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import org.tinylog.Logger;
 
 public class Main {
@@ -119,17 +130,17 @@ public class Main {
     var userServiceConfig = new UserServiceImpl.Config(dataSource);
 
     // Create service implementations with connection pool
-    // For the SpaceServiceImpl, use a default embedder ID (this would typically come from configuration)
-    java.util.UUID defaultEmbedderId = java.util.UUID.fromString("00000000-0000-0000-0000-000000000001"); // Placeholder UUID
-    this.spaceServiceImpl = new SpaceServiceImpl(
-        new SpaceServiceImpl.Config(dataSource, defaultEmbedderId));
+    // For the SpaceServiceImpl, use a default embedder ID (this would typically come from
+    // configuration)
+    java.util.UUID defaultEmbedderId =
+        java.util.UUID.fromString("00000000-0000-0000-0000-000000000001"); // Placeholder UUID
+    this.spaceServiceImpl =
+        new SpaceServiceImpl(new SpaceServiceImpl.Config(dataSource, defaultEmbedderId));
     this.userServiceImpl = new UserServiceImpl(userServiceConfig);
-    this.memoryServiceImpl = new MemoryServiceImpl(
-        new MemoryServiceImpl.Config(dataSource, minioConfig));
-    this.apiKeyServiceImpl = new ApiKeyServiceImpl(
-        new ApiKeyServiceImpl.Config(dataSource));
-    this.embedderServiceImpl = new EmbedderServiceImpl(
-        new EmbedderServiceImpl.Config(dataSource));
+    this.memoryServiceImpl =
+        new MemoryServiceImpl(new MemoryServiceImpl.Config(dataSource, minioConfig));
+    this.apiKeyServiceImpl = new ApiKeyServiceImpl(new ApiKeyServiceImpl.Config(dataSource));
+    this.embedderServiceImpl = new EmbedderServiceImpl(new EmbedderServiceImpl.Config(dataSource));
 
     // Create an in-process channel for REST-to-gRPC communication
     ManagedChannel channel = InProcessChannelBuilder.forName("in-process").build();
@@ -142,18 +153,16 @@ public class Main {
     this.embedderService = EmbedderServiceGrpc.newBlockingStub(channel);
   }
 
-  private record InitializedMinio(
-      MinioConfig config,
-      MinioClient client) {}
+  private record InitializedMinio(MinioConfig config, MinioClient client) {}
 
   private InitializedMinio setupMinioSource() {
     // Get MinIO configuration
-    var minioConfig = new MinioConfig(
-        System.getenv("MINIO_ENDPOINT"),
-        System.getenv("MINIO_ACCESS_KEY"),
-        System.getenv("MINIO_SECRET_KEY"),
-        System.getenv("MINIO_BUCKET")
-    );
+    var minioConfig =
+        new MinioConfig(
+            System.getenv("MINIO_ENDPOINT"),
+            System.getenv("MINIO_ACCESS_KEY"),
+            System.getenv("MINIO_SECRET_KEY"),
+            System.getenv("MINIO_BUCKET"));
     Logger.info("Configured MinIO: {}", minioConfig.toSecureString());
 
     var minioClient =
@@ -162,29 +171,37 @@ public class Main {
             .credentials(minioConfig.minioAccessKey(), minioConfig.minioSecretKey())
             .build();
     try {
-      boolean exists = minioClient.bucketExists(
-          BucketExistsArgs.builder().bucket(minioConfig.minioBucket()).build());
+      boolean exists =
+          minioClient.bucketExists(
+              BucketExistsArgs.builder().bucket(minioConfig.minioBucket()).build());
       if (exists) {
         Logger.info("Found MinIO memory storage bucket {}.", minioConfig.minioBucket());
       } else {
         Logger.info("MinIO memory storage bucket {} does NOT exist.", minioConfig.minioBucket());
-        minioClient.makeBucket(
-            MakeBucketArgs.builder().bucket(minioConfig.minioBucket()).build());
+        minioClient.makeBucket(MakeBucketArgs.builder().bucket(minioConfig.minioBucket()).build());
         Logger.info("Storage bucket {} was created.", minioConfig.minioBucket());
       }
-    } catch (ErrorResponseException | InsufficientDataException | InternalException |
-             InvalidKeyException | InvalidResponseException | IOException |
-             NoSuchAlgorithmException | ServerException | XmlParserException e) {
+    } catch (ErrorResponseException
+        | InsufficientDataException
+        | InternalException
+        | InvalidKeyException
+        | InvalidResponseException
+        | IOException
+        | NoSuchAlgorithmException
+        | ServerException
+        | XmlParserException e) {
       Logger.error(
-          e, "Unexpected failure checking MinIO memory storage bucket {}.", minioConfig.minioBucket());
+          e,
+          "Unexpected failure checking MinIO memory storage bucket {}.",
+          minioConfig.minioBucket());
     }
 
     return new InitializedMinio(minioConfig, minioClient);
   }
 
   /**
-   * Sets up and configures the HikariCP connection pool with database properties
-   * from system properties.
+   * Sets up and configures the HikariCP connection pool with database properties from system
+   * properties.
    *
    * @return A configured HikariDataSource for database connections
    */
@@ -216,8 +233,8 @@ public class Main {
 
   public Status startGrpcServer() throws IOException {
     // Create special interceptor for the initializeSystem method (no auth required)
-    var initMethodAuthorizer = new MethodAuthorizer()
-            .allowMethod("goodmem.v1.UserService/InitializeSystem");
+    var initMethodAuthorizer =
+        new MethodAuthorizer().allowMethod("goodmem.v1.UserService/InitializeSystem");
 
     // Load certificate and key files from resources using absolute paths
     var serverCrt = Main.class.getResource("/certs/server.crt");
@@ -234,15 +251,15 @@ public class Main {
     ByteSource serverKeyBs = Resources.asByteSource(serverKey);
 
     // Create TLS credentials with the certificate and key files
-    var credentials = TlsServerCredentials.newBuilder()
-        .clientAuth(ClientAuth.NONE) // Don't require client certificates
-        .keyManager(serverCrtBs.openBufferedStream(), serverKeyBs.openBufferedStream())
-        .build();
+    var credentials =
+        TlsServerCredentials.newBuilder()
+            .clientAuth(ClientAuth.NONE) // Don't require client certificates
+            .keyManager(serverCrtBs.openBufferedStream(), serverKeyBs.openBufferedStream())
+            .build();
 
     // Log certificate information
     Logger.info(
-        "TLS enabled for gRPC server with: Certificate {}, Private key {}",
-        serverCrt, serverKey);
+        "TLS enabled for gRPC server with: Certificate {}, Private key {}", serverCrt, serverKey);
 
     // Create a shared AuthInterceptor instance
     var authInterceptor = new AuthInterceptor(dataSource);
@@ -251,7 +268,10 @@ public class Main {
         Grpc.newServerBuilderForPort(GRPC_PORT, credentials)
             .addService(ServerInterceptors.intercept(spaceServiceImpl, authInterceptor))
             // For user service, we need to allow InitializeSystem to be called without auth
-            .addService(ServerInterceptors.intercept(userServiceImpl, new ConditionalAuthInterceptor(initMethodAuthorizer, authInterceptor)))
+            .addService(
+                ServerInterceptors.intercept(
+                    userServiceImpl,
+                    new ConditionalAuthInterceptor(initMethodAuthorizer, authInterceptor)))
             .addService(ServerInterceptors.intercept(memoryServiceImpl, authInterceptor))
             .addService(ServerInterceptors.intercept(apiKeyServiceImpl, authInterceptor))
             .addService(ServerInterceptors.intercept(embedderServiceImpl, authInterceptor))
@@ -291,119 +311,298 @@ public class Main {
     }
   }
 
+  /**
+   * Configures the OpenAPI information for the service documentation.
+   *
+   * <p>This method provides detailed metadata about the GoodMem API service, including its purpose,
+   * licensing, support information, and version. The information is used to generate the
+   * OpenAPI/Swagger documentation accessible via the /openapi endpoint.
+   *
+   * @param openApiInfo The OpenApiInfo object to configure
+   * @return The configured OpenApiInfo instance
+   */
+  private OpenApiInfo getOpenApiInfo(OpenApiInfo openApiInfo) {
+    return openApiInfo
+        .title("GoodMem API")
+        .description(
+            "API for interacting with the GoodMem service, providing vector-based memory storage and retrieval "
+                + "with multiple embedder support. The service enables creation of memory spaces, storing memories "
+                + "with vector representations, and efficient similarity-based retrieval.")
+        .version("v1")
+        .termsOfService("https://goodmem.io/terms")
+        .contact("GoodMem API Support", "https://goodmem.io/support", "support@goodmem.io")
+        .license("Apache 2.0", "https://www.apache.org/licenses/LICENSE-2.0", "Apache-2.0");
+  }
+
+  /**
+   * Configures the OpenAPI server information for the service documentation.
+   *
+   * <p>This method defines the server URLs and variables used in the OpenAPI documentation. It
+   * configures how client applications can connect to the GoodMem service, including the base path,
+   * port configurations, and server descriptions. The GoodMem service provides both REST (port
+   * 8080) and gRPC (port 9090) interfaces, though this configuration focuses on the REST endpoint.
+   *
+   * @param version The API version string to include in the server URL
+   * @param openApiServer The OpenApiServer object to configure
+   * @return The configured OpenApiServer instance
+   */
+  private OpenApiServer getOpenApiServer(String version, OpenApiServer openApiServer) {
+    return openApiServer
+        .description("GoodMem REST API server endpoint")
+        .url("http://localhost:{port}{basePath}/" + version + "/")
+        .variable("port", "Server's REST port", "8080", "8080")
+        .variable("basePath", "Base path of the API", "/v1", "", "/v1");
+  }
+
   public void startJavalinServer() {
+    // Note: redoc is available at /openapi
     Javalin app =
         Javalin.create(
-                config -> config.bundledPlugins.enableCors(
-                    cors -> cors.addRule(CorsRule::anyHost)))
+                config -> {
+                  config.bundledPlugins.enableCors(cors -> cors.addRule(CorsRule::anyHost));
+                  config.registerPlugin(
+                      new OpenApiPlugin(
+                          openApiConfig ->
+                              openApiConfig
+                                  .withPrettyOutput()
+                                  .withDefinitionConfiguration(
+                                      (version, openApiDefinition) ->
+                                          openApiDefinition
+                                              .withInfo(this::getOpenApiInfo)
+                                              .withServer(
+                                                  openApiServer ->
+                                                      getOpenApiServer(version, openApiServer))
+                                              .withSecurity(
+                                                  openApiSecurity ->
+                                                      openApiSecurity
+                                                          .withBearerAuth()
+                                                          .withApiKeyAuth(
+                                                              "ApiKeyAuth", "x-api-key")))));
+
+                  config.registerPlugin(
+                      new ReDocPlugin(
+                          reDocConfiguration -> {
+                            reDocConfiguration.setDocumentationPath("/openapi");
+                          }));
+
+                  config.registerPlugin(
+                      new SwaggerPlugin(
+                          swaggerConfiguration -> {
+                            swaggerConfiguration.setDocumentationPath("/openapi");
+                          }));
+
+                  config.router.apiBuilder(
+                      () -> {
+                        // Space endpoints
+                        path(
+                            "/v1/spaces",
+                            () -> {
+                              post(this::handleCreateSpace);
+//                              get(this::handleListSpaces);
+//                              path(
+//                                  "{id}",
+//                                  () -> {
+//                                    get(this::handleGetSpace);
+//                                    put(this::handleUpdateSpace);
+//                                    delete(this::handleDeleteSpace);
+//                                  });
+                            });
+
+//                        // User endpoints
+//                        path(
+//                            "/v1/users",
+//                            () -> {
+//                              path(
+//                                  "{id}",
+//                                  () -> {
+//                                    get(this::handleGetUser);
+//                                  });
+//                            });
+//                        path(
+//                            "/v1/system/init",
+//                            () -> {
+//                              post(this::handleSystemInit);
+//                            });
+//
+//                        // Memory endpoints
+//                        path(
+//                            "/v1/memories",
+//                            () -> {
+//                              post(this::handleCreateMemory);
+//                              path(
+//                                  "{id}",
+//                                  () -> {
+//                                    get(this::handleGetMemory);
+//                                    delete(this::handleDeleteMemory);
+//                                  });
+//                            });
+//                        path(
+//                            "/v1/spaces",
+//                            () -> {
+//                              path(
+//                                  "{spaceId}/memories",
+//                                  () -> {
+//                                    get(this::handleListMemories);
+//                                  });
+//                            });
+//
+//                        // API Key endpoints
+//                        path(
+//                            "/v1/apikeys",
+//                            () -> {
+//                              post(this::handleCreateApiKey);
+//                              get(this::handleListApiKeys);
+//                              path(
+//                                  "{id}",
+//                                  () -> {
+//                                    put(this::handleUpdateApiKey);
+//                                    delete(this::handleDeleteApiKey);
+//                                  });
+//                            });
+//
+//                        // Embedder endpoints
+//                        path(
+//                            "/v1/embedders",
+//                            () -> {
+//                              post(this::handleCreateEmbedder);
+//                              get(this::handleListEmbedders);
+//                              path(
+//                                  "{id}",
+//                                  () -> {
+//                                    get(this::handleGetEmbedder);
+//                                    put(this::handleUpdateEmbedder);
+//                                    delete(this::handleDeleteEmbedder);
+//                                  });
+//                            });
+                      });
+                })
             .start(REST_PORT);
-
-    // Configure REST routes that map to gRPC methods
-
-    // Space endpoints
-    app.post("/v1/spaces", this::handleCreateSpace);
-    app.get("/v1/spaces/{id}", this::handleGetSpace);
-    app.get("/v1/spaces", this::handleListSpaces);
-    app.put("/v1/spaces/{id}", this::handleUpdateSpace);
-    app.delete("/v1/spaces/{id}", this::handleDeleteSpace);
-
-    // User endpoints
-    app.get("/v1/users/{id}", this::handleGetUser);
-    app.post("/v1/system/init", this::handleSystemInit);
-
-    // Memory endpoints
-    app.post("/v1/memories", this::handleCreateMemory);
-    app.get("/v1/memories/{id}", this::handleGetMemory);
-    app.get("/v1/spaces/{spaceId}/memories", this::handleListMemories);
-    app.delete("/v1/memories/{id}", this::handleDeleteMemory);
-
-    // API Key endpoints
-    app.post("/v1/apikeys", this::handleCreateApiKey);
-    app.get("/v1/apikeys", this::handleListApiKeys);
-    app.put("/v1/apikeys/{id}", this::handleUpdateApiKey);
-    app.delete("/v1/apikeys/{id}", this::handleDeleteApiKey);
-    
-    // Embedder endpoints
-    app.post("/v1/embedders", this::handleCreateEmbedder);
-    app.get("/v1/embedders/{id}", this::handleGetEmbedder);
-    app.get("/v1/embedders", this::handleListEmbedders);
-    app.put("/v1/embedders/{id}", this::handleUpdateEmbedder);
-    app.delete("/v1/embedders/{id}", this::handleDeleteEmbedder);
 
     Logger.info("REST server started, listening on port {}.", REST_PORT);
   }
 
   // Space handlers
+  @OpenApi(
+      path = "/v1/spaces",
+      methods = { HttpMethod.POST },
+      summary = "Create a new Space",
+      description =
+          "Creates a new space with the provided name, labels, and embedder configuration. A space is a container for organizing related memories.",
+      operationId = "createSpace",
+      tags = "Spaces",
+      requestBody =
+          @OpenApiRequestBody(
+              description = "Space configuration details",
+              required = true,
+              content =
+                  @OpenApiContent(
+                      from = com.goodmem.rest.dto.CreateSpaceRequest.class,
+                      example =
+                          """
+              {
+                "name": "My Research Space",
+                "embedderId": "00000000-0000-0000-0000-000000000001",
+                "publicRead": false,
+                "labels": {
+                  "category": "research",
+                  "project": "ai-embeddings"
+                }
+              }
+              """)),
+      responses = {
+        @OpenApiResponse(
+            status = "200",
+            description = "Successfully created space",
+            content = @OpenApiContent(from = Space.class)),
+        @OpenApiResponse(
+            status = "400",
+            description = "Invalid request - missing required fields or invalid format"),
+        @OpenApiResponse(status = "401", description = "Unauthorized - invalid or missing API key"),
+        @OpenApiResponse(
+            status = "403",
+            description = "Forbidden - insufficient permissions to create spaces")
+      })
   private void handleCreateSpace(Context ctx) {
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST CreateSpace request with API key: {}.", apiKey);
 
-    CreateSpaceRequest.Builder requestBuilder = CreateSpaceRequest.newBuilder();
-    Map<String, Object> json = ctx.bodyAsClass(Map.class);
-
-    if (json.containsKey("name")) {
-      requestBuilder.setName((String) json.get("name"));
+    // Parse the JSON body into our DTO
+    CreateSpaceRequest requestDto = ctx.bodyAsClass(CreateSpaceRequest.class);
+    
+    // Convert the DTO to the gRPC request builder
+    var requestBuilder = SpaceOuterClass.CreateSpaceRequest.newBuilder();
+    
+    // Set the name if provided
+    if (requestDto.name() != null) {
+      requestBuilder.setName(requestDto.name());
     }
 
-    if (json.containsKey("embedder_id")) {
-      StatusOr<ByteString> embedderIdOr = convertHexToUuidBytes((String) json.get("embedder_id"));
+    // Convert and set the embedder ID if provided
+    if (requestDto.embedderId() != null) {
+      StatusOr<ByteString> embedderIdOr = convertHexToUuidBytes(requestDto.embedderId());
       if (embedderIdOr.isOk()) {
         requestBuilder.setEmbedderId(embedderIdOr.getValue());
       }
     }
 
-    if (json.containsKey("public_read")) {
-      requestBuilder.setPublicRead((Boolean) json.get("public_read"));
+    // Set the public read flag if provided
+    if (requestDto.publicRead() != null) {
+      requestBuilder.setPublicRead(requestDto.publicRead());
     }
 
-    // CreateSpaceRequest uses direct map rather than StringMap wrapper
-    if (json.containsKey("labels") && json.get("labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> labels = (Map<String, String>) json.get("labels");
-      requestBuilder.putAllLabels(labels);
+    // Set labels if provided
+    if (requestDto.labels() != null && !requestDto.labels().isEmpty()) {
+      requestBuilder.putAllLabels(requestDto.labels());
+    }
+    
+    // Set owner ID if provided
+    if (requestDto.ownerId() != null) {
+      StatusOr<ByteString> ownerIdOr = convertHexToUuidBytes(requestDto.ownerId());
+      if (ownerIdOr.isOk()) {
+        requestBuilder.setOwnerId(ownerIdOr.getValue());
+      }
     }
 
-    // Support for replace_labels/merge_labels fields from clients using the new pattern
-    // Both get treated the same for CreateSpaceRequest since it only has one labels field
-    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> replaceLabels = (Map<String, String>) json.get("replace_labels");
-      requestBuilder.putAllLabels(replaceLabels);
-    }
-
-    if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> mergeLabels = (Map<String, String>) json.get("merge_labels");
-      requestBuilder.putAllLabels(mergeLabels);
-    }
-
-    Space response = spaceService.createSpace(requestBuilder.build());
-    ctx.json(RestMapper.toJsonMap(response));
+    // Call the gRPC service
+    SpaceOuterClass.Space response = spaceService.createSpace(requestBuilder.build());
+    
+    // Map the gRPC response to our DTO
+    Map<String, Object> responseMap = RestMapper.toJsonMap(response);
+    Space responseDto = new Space(
+        (String) responseMap.get("space_id"),
+        (String) responseMap.get("name"),
+        (Map<String, String>) responseMap.get("labels"),
+        (String) responseMap.get("embedder_id"),
+        (Long) responseMap.get("created_at"),
+        (Long) responseMap.get("updated_at"),
+        (String) responseMap.get("owner_id"),
+        (String) responseMap.get("created_by_id"),
+        (String) responseMap.get("updated_by_id"),
+        (Boolean) responseMap.get("public_read")
+    );
+    
+    ctx.json(responseDto);
   }
 
   /**
-   * Handles a REST request to retrieve a Space by ID.
-   * Converts the hex UUID to binary format and calls the gRPC service.
+   * Handles a REST request to retrieve a Space by ID. Converts the hex UUID to binary format and
+   * calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleGetSpace(Context ctx) {
     String spaceIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    Logger.info(
-        "REST GetSpace request for ID: {} with API key: {}", spaceIdHex, apiKey);
+    Logger.info("REST GetSpace request for ID: {} with API key: {}", spaceIdHex, apiKey);
 
     StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
     if (spaceIdOr.isNotOk()) {
       setError(ctx, 400, "Invalid space ID format");
       return;
     }
-    GetSpaceRequest request = GetSpaceRequest
-        .newBuilder()
-        .setSpaceId(spaceIdOr.getValue())
-        .build();
+    GetSpaceRequest request = GetSpaceRequest.newBuilder().setSpaceId(spaceIdOr.getValue()).build();
 
-    Space response = spaceService.getSpace(request);
+    SpaceOuterClass.Space response = spaceService.getSpace(request);
     ctx.json(RestMapper.toJsonMap(response));
   }
 
@@ -425,29 +624,27 @@ public class Main {
 
     // Handle owner_id filter if provided
     if (ctx.queryParam("owner_id") != null) {
-      StatusOr<ByteString> ownerIdOr =
-          convertHexToUuidBytes(ctx.queryParam("owner_id"));
+      StatusOr<ByteString> ownerIdOr = convertHexToUuidBytes(ctx.queryParam("owner_id"));
       if (ownerIdOr.isOk()) {
         requestBuilder.setOwnerId(ownerIdOr.getValue());
       }
     }
 
     ListSpacesResponse response = spaceService.listSpaces(requestBuilder.build());
-    ctx.json(Map.of("spaces", response.getSpacesList().stream().map(RestMapper::toJsonMap).toList()));
+    ctx.json(
+        Map.of("spaces", response.getSpacesList().stream().map(RestMapper::toJsonMap).toList()));
   }
 
   /**
-   * Handles a REST request to update a Space by ID.
-   * Converts the hex UUID to binary format, builds the update request from JSON,
-   * and calls the gRPC service.
+   * Handles a REST request to update a Space by ID. Converts the hex UUID to binary format, builds
+   * the update request from JSON, and calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleUpdateSpace(Context ctx) {
     String spaceIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    Logger.info("REST UpdateSpace request for ID: {} with API key: {}",
-        spaceIdHex, apiKey);
+    Logger.info("REST UpdateSpace request for ID: {} with API key: {}", spaceIdHex, apiKey);
 
     StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
     if (spaceIdOr.isNotOk()) {
@@ -483,21 +680,20 @@ public class Main {
       requestBuilder.setMergeLabels(labelsBuilder.build());
     }
 
-    Space response = spaceService.updateSpace(requestBuilder.build());
+    SpaceOuterClass.Space response = spaceService.updateSpace(requestBuilder.build());
     ctx.json(RestMapper.toJsonMap(response));
   }
 
   /**
-   * Handles a REST request to delete a Space by ID.
-   * Converts the hex UUID to binary format and calls the gRPC service.
+   * Handles a REST request to delete a Space by ID. Converts the hex UUID to binary format and
+   * calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleDeleteSpace(Context ctx) {
     String spaceIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    Logger.info(
-        "REST DeleteSpace request for ID: {} with API key: {}", spaceIdHex, apiKey);
+    Logger.info("REST DeleteSpace request for ID: {} with API key: {}", spaceIdHex, apiKey);
 
     StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
     if (spaceIdOr.isNotOk()) {
@@ -505,8 +701,7 @@ public class Main {
       return;
     }
     spaceService.deleteSpace(
-        DeleteSpaceRequest.newBuilder().setSpaceId(spaceIdOr.getValue()).build()
-    );
+        DeleteSpaceRequest.newBuilder().setSpaceId(spaceIdOr.getValue()).build());
     ctx.status(204);
   }
 
@@ -514,8 +709,7 @@ public class Main {
   private void handleGetUser(Context ctx) {
     String userIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    Logger.info(
-        "REST GetUser request for ID: {} with API key: {}", userIdHex, apiKey);
+    Logger.info("REST GetUser request for ID: {} with API key: {}", userIdHex, apiKey);
 
     StatusOr<ByteString> userIdOr = convertHexToUuidBytes(userIdHex);
     if (userIdOr.isNotOk()) {
@@ -523,16 +717,16 @@ public class Main {
       return;
     }
 
-    User response = userService.getUser(
-        GetUserRequest.newBuilder().setUserId(userIdOr.getValue()).build());
+    User response =
+        userService.getUser(GetUserRequest.newBuilder().setUserId(userIdOr.getValue()).build());
     ctx.json(RestMapper.toJsonMap(response));
   }
 
   // Memory handlers
 
   /**
-   * Handles a REST request to create a new Memory.
-   * Builds the create request from JSON and calls the gRPC service.
+   * Handles a REST request to create a new Memory. Builds the create request from JSON and calls
+   * the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
@@ -544,8 +738,7 @@ public class Main {
     Map<String, Object> json = ctx.bodyAsClass(Map.class);
 
     if (json.containsKey("space_id")) {
-      StatusOr<ByteString> spaceIdOr =
-          convertHexToUuidBytes((String) json.get("space_id"));
+      StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes((String) json.get("space_id"));
       if (spaceIdOr.isNotOk()) {
         setError(ctx, 400, "Invalid space ID format");
         return;
@@ -572,16 +765,15 @@ public class Main {
   }
 
   /**
-   * Handles a REST request to retrieve a Memory by ID.
-   * Converts the hex UUID to binary format and calls the gRPC service.
+   * Handles a REST request to retrieve a Memory by ID. Converts the hex UUID to binary format and
+   * calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleGetMemory(Context ctx) {
     String memoryIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    Logger.info("REST GetMemory request for ID: {} with API key: {}",
-        memoryIdHex, apiKey);
+    Logger.info("REST GetMemory request for ID: {} with API key: {}", memoryIdHex, apiKey);
 
     StatusOr<ByteString> memoryIdOr = convertHexToUuidBytes(memoryIdHex);
     if (memoryIdOr.isNotOk()) {
@@ -589,15 +781,15 @@ public class Main {
       return;
     }
 
-    Memory response = memoryService.getMemory(
-        GetMemoryRequest.newBuilder().setMemoryId(memoryIdOr.getValue()).build()
-    );
+    Memory response =
+        memoryService.getMemory(
+            GetMemoryRequest.newBuilder().setMemoryId(memoryIdOr.getValue()).build());
     ctx.json(RestMapper.toJsonMap(response));
   }
 
   /**
-   * Handles a REST request to list Memories within a Space.
-   * Converts the space hex UUID to binary format and calls the gRPC service.
+   * Handles a REST request to list Memories within a Space. Converts the space hex UUID to binary
+   * format and calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
@@ -613,15 +805,17 @@ public class Main {
       return;
     }
 
-    ListMemoriesResponse response = memoryService.listMemories(
-        ListMemoriesRequest.newBuilder().setSpaceId(spaceIdOr.getValue()).build());
+    ListMemoriesResponse response =
+        memoryService.listMemories(
+            ListMemoriesRequest.newBuilder().setSpaceId(spaceIdOr.getValue()).build());
     ctx.json(
-        Map.of("memories", response.getMemoriesList().stream().map(RestMapper::toJsonMap).toList()));
+        Map.of(
+            "memories", response.getMemoriesList().stream().map(RestMapper::toJsonMap).toList()));
   }
 
   /**
-   * Handles a REST request to delete a Memory by ID.
-   * Converts the hex UUID to binary format and calls the gRPC service.
+   * Handles a REST request to delete a Memory by ID. Converts the hex UUID to binary format and
+   * calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
@@ -636,17 +830,14 @@ public class Main {
       return;
     }
     memoryService.deleteMemory(
-        DeleteMemoryRequest
-            .newBuilder()
-            .setMemoryId(memoryIdOr.getValue())
-            .build());
+        DeleteMemoryRequest.newBuilder().setMemoryId(memoryIdOr.getValue()).build());
     ctx.status(204);
   }
 
   // API Key handlers
   /**
-   * Handles a REST request to create a new API Key.
-   * Builds the create request from JSON and calls the gRPC service.
+   * Handles a REST request to create a new API Key. Builds the create request from JSON and calls
+   * the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
@@ -674,8 +865,8 @@ public class Main {
   }
 
   /**
-   * Handles a REST request to list API Keys for the current user.
-   * Calls the gRPC service to get the list of keys.
+   * Handles a REST request to list API Keys for the current user. Calls the gRPC service to get the
+   * list of keys.
    *
    * @param ctx The Javalin context containing the request and response
    */
@@ -690,17 +881,15 @@ public class Main {
   }
 
   /**
-   * Handles a REST request to update an API Key by ID.
-   * Converts the hex UUID to binary format, builds the update request from JSON,
-   * and calls the gRPC service.
+   * Handles a REST request to update an API Key by ID. Converts the hex UUID to binary format,
+   * builds the update request from JSON, and calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
   private void handleUpdateApiKey(Context ctx) {
     String apiKeyIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
-    Logger.info(
-        "REST UpdateApiKey request for ID: {} with API key: {}", apiKeyIdHex, apiKey);
+    Logger.info("REST UpdateApiKey request for ID: {} with API key: {}", apiKeyIdHex, apiKey);
 
     StatusOr<ByteString> apiKeyIdOr = convertHexToUuidBytes(apiKeyIdHex);
     if (apiKeyIdOr.isNotOk()) {
@@ -716,22 +905,25 @@ public class Main {
     if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
       @SuppressWarnings("unchecked")
       Map<String, String> labels = (Map<String, String>) json.get("replace_labels");
-      goodmem.v1.Common.StringMap stringMap = goodmem.v1.Common.StringMap.newBuilder().putAllLabels(labels).build();
+      goodmem.v1.Common.StringMap stringMap =
+          goodmem.v1.Common.StringMap.newBuilder().putAllLabels(labels).build();
       requestBuilder.setReplaceLabels(stringMap);
     } else if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
       @SuppressWarnings("unchecked")
       Map<String, String> labels = (Map<String, String>) json.get("merge_labels");
-      goodmem.v1.Common.StringMap stringMap = goodmem.v1.Common.StringMap.newBuilder().putAllLabels(labels).build();
+      goodmem.v1.Common.StringMap stringMap =
+          goodmem.v1.Common.StringMap.newBuilder().putAllLabels(labels).build();
       requestBuilder.setMergeLabels(stringMap);
     }
 
     if (json.containsKey("status")) {
       String statusStr = (String) json.get("status");
-      Apikey.Status status = switch (statusStr.toUpperCase()) {
-        case "ACTIVE" -> Apikey.Status.ACTIVE;
-        case "INACTIVE" -> Apikey.Status.INACTIVE;
-        default -> Apikey.Status.STATUS_UNSPECIFIED;
-      };
+      Apikey.Status status =
+          switch (statusStr.toUpperCase()) {
+            case "ACTIVE" -> Apikey.Status.ACTIVE;
+            case "INACTIVE" -> Apikey.Status.INACTIVE;
+            default -> Apikey.Status.STATUS_UNSPECIFIED;
+          };
       requestBuilder.setStatus(status);
     }
 
@@ -740,8 +932,8 @@ public class Main {
   }
 
   /**
-   * Handles a REST request to delete an API Key by ID.
-   * Converts the hex UUID to binary format and calls the gRPC service.
+   * Handles a REST request to delete an API Key by ID. Converts the hex UUID to binary format and
+   * calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
@@ -761,10 +953,10 @@ public class Main {
   }
 
   // Embedder handlers
-  
+
   /**
-   * Handles a REST request to create a new Embedder.
-   * Builds the create request from JSON and calls the gRPC service.
+   * Handles a REST request to create a new Embedder. Builds the create request from JSON and calls
+   * the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
@@ -785,7 +977,8 @@ public class Main {
 
     if (json.containsKey("provider_type")) {
       String providerTypeStr = (String) json.get("provider_type");
-      goodmem.v1.EmbedderOuterClass.ProviderType providerType = EnumConverters.providerTypeFromString(providerTypeStr);
+      goodmem.v1.EmbedderOuterClass.ProviderType providerType =
+          EnumConverters.providerTypeFromString(providerTypeStr);
       requestBuilder.setProviderType(providerType);
     }
 
@@ -813,11 +1006,13 @@ public class Main {
       }
     }
 
-    if (json.containsKey("supported_modalities") && json.get("supported_modalities") instanceof Iterable) {
+    if (json.containsKey("supported_modalities")
+        && json.get("supported_modalities") instanceof Iterable) {
       @SuppressWarnings("unchecked")
       Iterable<String> modalityStrings = (Iterable<String>) json.get("supported_modalities");
       for (String modalityStr : modalityStrings) {
-        goodmem.v1.EmbedderOuterClass.Modality modality = EnumConverters.modalityFromString(modalityStr);
+        goodmem.v1.EmbedderOuterClass.Modality modality =
+            EnumConverters.modalityFromString(modalityStr);
         if (modality != goodmem.v1.EmbedderOuterClass.Modality.MODALITY_UNSPECIFIED) {
           requestBuilder.addSupportedModalities(modality);
         }
@@ -854,8 +1049,8 @@ public class Main {
   }
 
   /**
-   * Handles a REST request to retrieve an Embedder by ID.
-   * Converts the hex UUID to binary format and calls the gRPC service.
+   * Handles a REST request to retrieve an Embedder by ID. Converts the hex UUID to binary format
+   * and calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
@@ -870,15 +1065,15 @@ public class Main {
       return;
     }
 
-    Embedder response = embedderService.getEmbedder(
-        GetEmbedderRequest.newBuilder().setEmbedderId(embedderIdOr.getValue()).build()
-    );
+    Embedder response =
+        embedderService.getEmbedder(
+            GetEmbedderRequest.newBuilder().setEmbedderId(embedderIdOr.getValue()).build());
     ctx.json(RestMapper.toJsonMap(response));
   }
 
   /**
-   * Handles a REST request to list Embedders with optional filters.
-   * Builds the list request from query parameters and calls the gRPC service.
+   * Handles a REST request to list Embedders with optional filters. Builds the list request from
+   * query parameters and calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
@@ -899,7 +1094,8 @@ public class Main {
     // Handle provider_type filter if provided
     if (ctx.queryParam("provider_type") != null) {
       String providerTypeStr = ctx.queryParam("provider_type");
-      goodmem.v1.EmbedderOuterClass.ProviderType providerType = EnumConverters.providerTypeFromString(providerTypeStr);
+      goodmem.v1.EmbedderOuterClass.ProviderType providerType =
+          EnumConverters.providerTypeFromString(providerTypeStr);
       if (providerType != goodmem.v1.EmbedderOuterClass.ProviderType.PROVIDER_TYPE_UNSPECIFIED) {
         requestBuilder.setProviderType(providerType);
       }
@@ -916,13 +1112,14 @@ public class Main {
             });
 
     ListEmbeddersResponse response = embedderService.listEmbedders(requestBuilder.build());
-    ctx.json(Map.of("embedders", response.getEmbeddersList().stream().map(RestMapper::toJsonMap).toList()));
+    ctx.json(
+        Map.of(
+            "embedders", response.getEmbeddersList().stream().map(RestMapper::toJsonMap).toList()));
   }
 
   /**
-   * Handles a REST request to update an Embedder by ID.
-   * Converts the hex UUID to binary format, builds the update request from JSON,
-   * and calls the gRPC service.
+   * Handles a REST request to update an Embedder by ID. Converts the hex UUID to binary format,
+   * builds the update request from JSON, and calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
@@ -937,7 +1134,7 @@ public class Main {
       return;
     }
 
-    UpdateEmbedderRequest.Builder requestBuilder = 
+    UpdateEmbedderRequest.Builder requestBuilder =
         UpdateEmbedderRequest.newBuilder().setEmbedderId(embedderIdOr.getValue());
 
     Map<String, Object> json = ctx.bodyAsClass(Map.class);
@@ -974,11 +1171,13 @@ public class Main {
       }
     }
 
-    if (json.containsKey("supported_modalities") && json.get("supported_modalities") instanceof Iterable) {
+    if (json.containsKey("supported_modalities")
+        && json.get("supported_modalities") instanceof Iterable) {
       @SuppressWarnings("unchecked")
       Iterable<String> modalityStrings = (Iterable<String>) json.get("supported_modalities");
       for (String modalityStr : modalityStrings) {
-        goodmem.v1.EmbedderOuterClass.Modality modality = EnumConverters.modalityFromString(modalityStr);
+        goodmem.v1.EmbedderOuterClass.Modality modality =
+            EnumConverters.modalityFromString(modalityStr);
         if (modality != goodmem.v1.EmbedderOuterClass.Modality.MODALITY_UNSPECIFIED) {
           requestBuilder.addSupportedModalities(modality);
         }
@@ -1017,8 +1216,8 @@ public class Main {
   }
 
   /**
-   * Handles a REST request to delete an Embedder by ID.
-   * Converts the hex UUID to binary format and calls the gRPC service.
+   * Handles a REST request to delete an Embedder by ID. Converts the hex UUID to binary format and
+   * calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
@@ -1032,14 +1231,14 @@ public class Main {
       setError(ctx, 400, "Invalid embedder ID format");
       return;
     }
-    
+
     embedderService.deleteEmbedder(
         DeleteEmbedderRequest.newBuilder().setEmbedderId(embedderIdOr.getValue()).build());
     ctx.status(204);
   }
 
   // Utility methods for converting protocol buffer messages to Maps for JSON serialization
-  private Map<String, Object> protoToMap(Space space) {
+  private Map<String, Object> protoToMap(SpaceOuterClass.Space space) {
     Map<String, Object> map = new HashMap<>();
     map.put("space_id", Uuids.bytesToHex(space.getSpaceId().toByteArray()));
     map.put("name", space.getName());
@@ -1102,7 +1301,7 @@ public class Main {
     map.put("updated_by_id", Uuids.bytesToHex(apiKey.getUpdatedById().toByteArray()));
     return map;
   }
-  
+
   private Map<String, Object> protoToMap(Embedder embedder) {
     Map<String, Object> map = new HashMap<>();
     map.put("embedder_id", Uuids.bytesToHex(embedder.getEmbedderId().toByteArray()));
@@ -1113,14 +1312,14 @@ public class Main {
     map.put("api_path", embedder.getApiPath());
     map.put("model_identifier", embedder.getModelIdentifier());
     map.put("dimensionality", embedder.getDimensionality());
-    
+
     if (embedder.hasMaxSequenceLength()) {
       map.put("max_sequence_length", embedder.getMaxSequenceLength());
     }
-    
-    map.put("supported_modalities", embedder.getSupportedModalitiesList().stream()
-        .map(Enum::name)
-        .toList());
+
+    map.put(
+        "supported_modalities",
+        embedder.getSupportedModalitiesList().stream().map(Enum::name).toList());
     map.put("labels", embedder.getLabelsMap());
     map.put("version", embedder.getVersion());
     map.put("monitoring_endpoint", embedder.getMonitoringEndpoint());
@@ -1134,6 +1333,7 @@ public class Main {
 
   // Utility methods for converting between UUID formats
   private static final ByteString ZEROS_BYTESTRING = ByteString.copyFrom(new byte[16]);
+
   private StatusOr<ByteString> convertHexToUuidBytes(String hexString) {
     if (Strings.isNullOrEmpty(hexString)) {
       return StatusOr.ofValue(ZEROS_BYTESTRING);
@@ -1185,10 +1385,14 @@ public class Main {
       ctx.status(200)
           .json(
               Map.of(
-                  "initialized", true,
-                  "message", "System initialized successfully",
-                  "root_api_key", result.apiKey(),
-                  "user_id", result.userId().toString()));
+                  "initialized",
+                  true,
+                  "message",
+                  "System initialized successfully",
+                  "root_api_key",
+                  result.apiKey(),
+                  "user_id",
+                  result.userId().toString()));
 
     } catch (Exception e) {
       Logger.error(e, "Error during system initialization.");

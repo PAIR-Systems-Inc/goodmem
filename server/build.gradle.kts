@@ -8,25 +8,35 @@ plugins {
 group = "com.goodmem"
 version = "0.1.0"
 
+val javalinVersion = "6.6.0"
+val jacksonVersion = "2.18.3"
+val protobufVersion = "3.25.5"
+val grpcVersion = "1.72.0"
+
 dependencies {
     // Javalin
-    implementation("io.javalin:javalin:6.6.0")
+    implementation("io.javalin:javalin:$javalinVersion")
+    implementation("io.javalin.community.openapi:javalin-openapi-plugin:$javalinVersion")
+    implementation("io.javalin.community.openapi:javalin-redoc-plugin:$javalinVersion")
+    implementation("io.javalin.community.openapi:javalin-swagger-plugin:$javalinVersion")
+    implementation("io.swagger.core.v3:swagger-annotations-jakarta:2.2.30")
+    annotationProcessor("io.javalin.community.openapi:openapi-annotation-processor:$javalinVersion")
 
     // MinIO official client.
     implementation("io.minio:minio:8.5.17")
     
     // gRPC
-    implementation("io.grpc:grpc-netty-shaded:1.72.0")
-    implementation("io.grpc:grpc-protobuf:1.72.0")
-    implementation("io.grpc:grpc-stub:1.72.0")
-    implementation("io.grpc:grpc-inprocess:1.72.0")
-    implementation("io.grpc:grpc-services:1.72.0")
+    implementation("io.grpc:grpc-netty-shaded:$grpcVersion")
+    implementation("io.grpc:grpc-protobuf:$grpcVersion")
+    implementation("io.grpc:grpc-stub:$grpcVersion")
+    implementation("io.grpc:grpc-inprocess:$grpcVersion")
+    implementation("io.grpc:grpc-services:$grpcVersion")
     
     // JSON
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.3")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:$jacksonVersion")
     
     // Protocol Buffer utilities
-    implementation("com.google.protobuf:protobuf-java-util:3.25.5")
+    implementation("com.google.protobuf:protobuf-java-util:$protobufVersion")
     
     // Annotation for generated code
     implementation("jakarta.annotation:jakarta.annotation-api:3.0.0")
