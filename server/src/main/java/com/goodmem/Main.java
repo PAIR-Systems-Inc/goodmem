@@ -399,13 +399,13 @@ public class Main {
                             () -> {
                               post(this::handleCreateSpace);
 //                              get(this::handleListSpaces);
-//                              path(
-//                                  "{id}",
-//                                  () -> {
-//                                    get(this::handleGetSpace);
+                              path(
+                                  "{id}",
+                                  () -> {
+                                    get(this::handleGetSpace);
 //                                    put(this::handleUpdateSpace);
 //                                    delete(this::handleDeleteSpace);
-//                                  });
+                                  });
                             });
 
 //                        // User endpoints
@@ -584,6 +584,39 @@ public class Main {
     ctx.json(responseDto);
   }
 
+  @OpenApi(
+      path = "/v1/spaces/{id}",
+      methods = { HttpMethod.GET },
+      summary = "Get a space by ID",
+      description = "Retrieves a specific space by its unique identifier. Returns the complete space information, including name, labels, embedder configuration, and metadata.",
+      operationId = "getSpace",
+      tags = "Spaces",
+      pathParams = {
+          @io.javalin.openapi.OpenApiParam(
+              name = "id",
+              description = "The unique identifier of the space to retrieve",
+              required = true,
+              type = String.class,
+              example = "550e8400-e29b-41d4-a716-446655440000")
+      },
+      responses = {
+          @OpenApiResponse(
+              status = "200",
+              description = "Successfully retrieved space",
+              content = @OpenApiContent(from = Space.class)),
+          @OpenApiResponse(
+              status = "400",
+              description = "Invalid request - space ID in invalid format"),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to view this space"),
+          @OpenApiResponse(
+              status = "404",
+              description = "Not found - space with the specified ID does not exist")
+      })
   /**
    * Handles a REST request to retrieve a Space by ID. Converts the hex UUID to binary format and
    * calls the gRPC service.
@@ -595,15 +628,36 @@ public class Main {
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST GetSpace request for ID: {} with API key: {}", spaceIdHex, apiKey);
 
+    // Validate the spaceId
     StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
     if (spaceIdOr.isNotOk()) {
       setError(ctx, 400, "Invalid space ID format");
       return;
     }
-    GetSpaceRequest request = GetSpaceRequest.newBuilder().setSpaceId(spaceIdOr.getValue()).build();
-
+    
+    // Create and execute the gRPC request
+    SpaceOuterClass.GetSpaceRequest request = SpaceOuterClass.GetSpaceRequest.newBuilder()
+        .setSpaceId(spaceIdOr.getValue())
+        .build();
+    
     SpaceOuterClass.Space response = spaceService.getSpace(request);
-    ctx.json(RestMapper.toJsonMap(response));
+    
+    // Map the gRPC response to our DTO
+    Map<String, Object> responseMap = RestMapper.toJsonMap(response);
+    Space responseDto = new Space(
+        (String) responseMap.get("space_id"),
+        (String) responseMap.get("name"),
+        (Map<String, String>) responseMap.get("labels"),
+        (String) responseMap.get("embedder_id"),
+        (Long) responseMap.get("created_at"),
+        (Long) responseMap.get("updated_at"),
+        (String) responseMap.get("owner_id"),
+        (String) responseMap.get("created_by_id"),
+        (String) responseMap.get("updated_by_id"),
+        (Boolean) responseMap.get("public_read")
+    );
+    
+    ctx.json(responseDto);
   }
 
   private void handleListSpaces(Context ctx) {
