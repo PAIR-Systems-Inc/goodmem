@@ -1,7 +1,6 @@
 package com.goodmem.rest.dto;
 
 import goodmem.v1.SpaceOuterClass;
-import goodmem.v1.SpaceOuterClass.SortOrder;
 import io.javalin.openapi.OpenApiDescription;
 import io.javalin.openapi.OpenApiExample;
 import io.javalin.openapi.OpenApiName;
@@ -66,19 +65,11 @@ public record ListSpacesRequest(
     }
     
     /**
-     * Utility method to convert the sortOrder string to the protocol buffer enum.
+     * Gets the sort order as an enum value.
      * 
-     * @return The corresponding SortOrder enum value, or SORT_ORDER_UNSPECIFIED if null or invalid
+     * @return The SortOrder enum value, or SORT_ORDER_UNSPECIFIED if null or invalid
      */
     public SortOrder getSortOrderEnum() {
-        if (sortOrder == null) {
-            return SortOrder.SORT_ORDER_UNSPECIFIED;
-        }
-        
-        return switch (sortOrder.toUpperCase()) {
-            case "ASCENDING" -> SortOrder.ASCENDING;
-            case "DESCENDING" -> SortOrder.DESCENDING;
-            default -> SortOrder.SORT_ORDER_UNSPECIFIED;
-        };
+        return SortOrder.fromString(sortOrder);
     }
 }

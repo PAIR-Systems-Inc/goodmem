@@ -821,7 +821,7 @@ public class Main {
     
     // Set sort order if provided
     if (!Strings.isNullOrEmpty(requestDto.sortOrder())) {
-      requestBuilder.setSortOrder(requestDto.getSortOrderEnum());
+      requestBuilder.setSortOrder(requestDto.getSortOrderEnum().toProtoSortOrder());
     }
 
     // Call the gRPC service
