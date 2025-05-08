@@ -20,7 +20,7 @@ var (
 	labels        []string
 
 	// Variables for createSpaceCmd
-	embeddingModel string
+	embedderIDStr  string
 	ownerIDStr     string
 
 	// Variables for listSpacesCmd
@@ -84,19 +84,16 @@ var createSpaceCmd = &cobra.Command{
 	Short: "Create a new space",
 	Long:  `Create a new space in the GoodMem service with the specified name, labels, and settings.`,
 	Example: `  # Create a basic space
-  goodmem space create --name "My Project"
+  goodmem space create --name "My Project" --embedder-id 123e4567-e89b-12d3-a456-426614174000
 
   # Create a space with labels
-  goodmem space create --name "My Project" --label user=alice --label project=demo
+  goodmem space create --name "My Project" --embedder-id 123e4567-e89b-12d3-a456-426614174000 --label user=alice --label project=demo
 
   # Create a public-readable space
-  goodmem space create --name "Public Knowledge Base" --public-read
-
-  # Create a space with a specific embedding model
-  goodmem space create --name "Custom Embeddings" --embedding-model openai-ada-002
+  goodmem space create --name "Public Knowledge Base" --embedder-id 123e4567-e89b-12d3-a456-426614174000 --public-read
 
   # Create a space for another user (requires admin permissions)
-  goodmem space create --name "Team Space" --owner 123e4567-e89b-12d3-a456-426614174000`,
+  goodmem space create --name "Team Space" --embedder-id 123e4567-e89b-12d3-a456-426614174000 --owner 123e4567-e89b-12d3-a456-426614174001`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Validate required inputs
 		if spaceName == "" {
@@ -122,11 +119,20 @@ var createSpaceCmd = &cobra.Command{
 
 		// Create the request
 		req := &v1.CreateSpaceRequest{
-			Name:           spaceName,
-			Labels:         labelsMap,
-			PublicRead:     publicRead,
-			EmbeddingModel: embeddingModel,
+			Name:       spaceName,
+			Labels:     labelsMap,
+			PublicRead: publicRead,
 		}
+
+		// Add embedder_id
+		if embedderIDStr == "" {
+			return fmt.Errorf("embedder ID is required")
+		}
+		embedderIDBytes, err := uuidStringToBytes(embedderIDStr)
+		if err != nil {
+			return fmt.Errorf("invalid embedder ID: %w", err)
+		}
+		req.EmbedderId = embedderIDBytes
 
 		// Add owner_id if specified (for admin use)
 		if ownerIDStr != "" {
@@ -206,7 +212,13 @@ var createSpaceCmd = &cobra.Command{
 			fmt.Printf("Created at: %s\n", formatTimestamp(space.CreatedAt))
 		}
 		fmt.Printf("Public:     %v\n", space.PublicRead)
-		fmt.Printf("Model:      %s\n", space.EmbeddingModel)
+		
+		// Format and display embedder ID
+		embedderIDStr, err := uuidBytesToString(space.EmbedderId)
+		if err != nil {
+			embedderIDStr = fmt.Sprintf("<invalid-uuid: %x>", space.EmbedderId)
+		}
+		fmt.Printf("Embedder:   %s\n", embedderIDStr)
 
 		// Display labels if present
 		if len(space.Labels) > 0 {
@@ -719,12 +731,17 @@ func init() {
 	createSpaceCmd.Flags().StringVar(&spaceName, "name", "", "Name of the space")
 	createSpaceCmd.Flags().StringSliceVarP(&labels, "label", "l", []string{}, "Labels in key=value format (can be specified multiple times)")
 	createSpaceCmd.Flags().BoolVar(&publicRead, "public-read", false, "Whether the space is publicly readable")
-	createSpaceCmd.Flags().StringVar(&embeddingModel, "embedding-model", "", "Embedding model to use (default from server config if not specified)")
+	createSpaceCmd.Flags().StringVar(&embedderIDStr, "embedder-id", "", "ID of the embedder to use for this space")
 	createSpaceCmd.Flags().StringVar(&ownerIDStr, "owner", "", "Owner ID for the space (requires admin permissions)")
 
 	if err := createSpaceCmd.MarkFlagRequired("name"); err != nil {
 		// This should only happen if the flag doesn't exist
 		panic(fmt.Sprintf("Failed to mark flag 'name' as required: %v", err))
+	}
+	
+	if err := createSpaceCmd.MarkFlagRequired("embedder-id"); err != nil {
+		// This should only happen if the flag doesn't exist
+		panic(fmt.Sprintf("Failed to mark flag 'embedder-id' as required: %v", err))
 	}
 
 	// Flags for list

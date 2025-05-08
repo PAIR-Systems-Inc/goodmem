@@ -13,7 +13,7 @@ import java.util.UUID;
  * @param ownerId The user ID of the owner
  * @param name The name of the space
  * @param labels User-defined labels for the space
- * @param embeddingModel The embedding model used by this space
+ * @param embedderId The ID of the embedder used by this space
  * @param publicRead Whether this space is public readable
  * @param createdAt Timestamp when the record was created
  * @param updatedAt Timestamp when the record was last updated
@@ -25,7 +25,7 @@ public record Space(
     UUID ownerId,
     String name,
     Map<String, String> labels,
-    String embeddingModel,
+    UUID embedderId,
     boolean publicRead,
     Instant createdAt,
     Instant updatedAt,
@@ -42,7 +42,7 @@ public record Space(
             .setSpaceId(UuidUtil.toProtoBytes(spaceId))
             .setOwnerId(UuidUtil.toProtoBytes(ownerId))
             .setName(name)
-            .setEmbeddingModel(embeddingModel)
+            .setEmbedderId(UuidUtil.toProtoBytes(embedderId))
             .setPublicRead(publicRead)
             .setCreatedAt(DbUtil.toProtoTimestamp(createdAt))
             .setUpdatedAt(DbUtil.toProtoTimestamp(updatedAt))

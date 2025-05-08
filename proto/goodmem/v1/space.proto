@@ -16,7 +16,7 @@ message Space {
   bytes space_id = 1; // UUID (16 bytes)
   string name = 2; // human-friendly name, unique per owner
   map<string, string> labels = 3; // arbitrary k-v pairs, includes reserved keys
-  string embedding_model = 4; // e.g. "openai-ada-002"
+  optional bytes embedder_id = 4; // Reference to an Embedder UUID (16 bytes)
   google.protobuf.Timestamp created_at = 5;
   bytes owner_id = 6; // User UUID (16 bytes)
   bool public_read = 7; // if true, anyone may query
@@ -42,7 +42,7 @@ service SpaceService {
 message CreateSpaceRequest {
   string name = 1;
   map<string, string> labels = 2;
-  string embedding_model = 3;
+  optional bytes embedder_id = 3; // Reference to an Embedder UUID (16 bytes)
   bool public_read = 4;
   optional bytes owner_id = 5; // Optional: if not provided, derived from auth context. If provided, requires CREATE_SPACE_ANY permission.
   // created_by_id always derived from auth context.

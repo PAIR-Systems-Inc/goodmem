@@ -2,24 +2,22 @@ package com.goodmem;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.goodmem.db.helpers.EntityHelper;
 import com.goodmem.db.util.PostgresTestHelper;
 import com.goodmem.db.util.PostgresTestHelper.PostgresContext;
 import com.goodmem.security.AuthInterceptor;
-import com.goodmem.security.Permission;
 import com.goodmem.security.Role;
 import com.goodmem.security.Roles;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Empty;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import goodmem.v1.SpaceOuterClass;
+import goodmem.v1.Common.StringMap;
 import goodmem.v1.SpaceOuterClass.CreateSpaceRequest;
 import goodmem.v1.SpaceOuterClass.DeleteSpaceRequest;
 import goodmem.v1.SpaceOuterClass.GetSpaceRequest;
 import goodmem.v1.SpaceOuterClass.Space;
-import goodmem.v1.Common.StringMap;
 import goodmem.v1.SpaceOuterClass.UpdateSpaceRequest;
-import goodmem.v1.UserOuterClass;
 import goodmem.v1.UserOuterClass.InitializeSystemRequest;
 import goodmem.v1.UserOuterClass.InitializeSystemResponse;
 import io.grpc.Context;
@@ -31,7 +29,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -61,6 +58,11 @@ public class SpaceServiceImplTest {
   private static UserServiceImpl userService;
   private static SpaceServiceImpl spaceService;
   private static AuthInterceptor authInterceptor;
+  
+  // Store test user information at class level for reuse across tests
+  private static UUID testUserId;
+  private static String testUserApiKey;
+  private static UUID testApiKeyId;
 
   @BeforeAll
   static void setUp() throws SQLException {
@@ -78,8 +80,30 @@ public class SpaceServiceImplTest {
     // Create the UserServiceImpl with the test datasource
     userService = new UserServiceImpl(new UserServiceImpl.Config(dataSource));
 
-    // Create the SpaceServiceImpl with the test datasource
-    spaceService = new SpaceServiceImpl(new SpaceServiceImpl.Config(dataSource, "openai-ada-002"));
+    // Create the SpaceServiceImpl with the test datasource and a default embedder ID
+    UUID defaultEmbedderId = null;
+    try (Connection conn = dataSource.getConnection()) {
+      // Create test user and store information at class level for reuse
+      EntityHelper.TestUserInfo userInfo = EntityHelper.createTestUserWithKey(
+          conn,
+          "testadmin",
+          "Test Admin",
+          "testadmin@example.com",
+          Roles.ADMIN.role().getName(),
+          null // No user id since this is the first user.
+      );
+      
+      // Store user info at class level
+      testUserId = userInfo.userId();
+      testUserApiKey = userInfo.apiKeyValue();
+      testApiKeyId = userInfo.apiKeyId();
+      
+      // Create default embedder for testing
+      defaultEmbedderId = EntityHelper.createTestEmbedder(
+          conn, UUID.fromString("00000000-0000-0000-0000-000000000001"), testUserId);
+    }
+
+    spaceService = new SpaceServiceImpl(new SpaceServiceImpl.Config(dataSource, defaultEmbedderId));
 
     // Create the AuthInterceptor with the test datasource
     authInterceptor = new AuthInterceptor(dataSource);
@@ -186,7 +210,9 @@ public class SpaceServiceImplTest {
       assertEquals(rootUserIdBytes, createdSpace.getOwnerId(), "Owner ID should be root user");
       assertEquals(rootUserIdBytes, createdSpace.getCreatedById(), "Creator ID should be root user");
       assertEquals(rootUserIdBytes, createdSpace.getUpdatedById(), "Updater ID should be root user");
-      assertEquals("openai-ada-002", createdSpace.getEmbeddingModel(), "Default embedding model should be used");
+      // Verify the default embedder ID is used
+      ByteString defaultEmbedderIdBytes = com.goodmem.db.util.UuidUtil.toProtoBytes(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+      assertEquals(defaultEmbedderIdBytes, createdSpace.getEmbedderId(), "Default embedder ID should be used");
       assertTrue(createdSpace.getPublicRead(), "Public read flag should be set");
 
       // Verify labels
@@ -204,13 +230,17 @@ public class SpaceServiceImplTest {
       System.out.println("\nStep 3: Create a second user");
 
       // Create a new user directly in the database
-      UUID secondUserId = createUserInDatabase(
-          "testuser",
-          "Test User",
-          "testuser@example.com",
-          "password123",
-          Roles.USER.role().getName(),
-          rootUserId);
+      EntityHelper.TestUserInfo userInfo;
+      try (Connection conn = dataSource.getConnection()) {
+          userInfo = EntityHelper.createTestUserWithKey(
+              conn,
+              "testuser",
+              "Test User", 
+              "testuser@example.com",
+              Roles.USER.role().getName(),
+              rootUserId);
+      }
+      UUID secondUserId = userInfo.userId();
 
       System.out.println("Created second user ID: " + secondUserId);
 
@@ -673,87 +703,6 @@ public class SpaceServiceImplTest {
           }
         }
       }
-    }
-  }
-
-  /**
-   * Creates a user directly in the database for testing purposes.
-   */
-  private UUID createUserInDatabase(
-      String username,
-      String displayName,
-      String email,
-      String password,
-      String roleName,
-      UUID createdByUserId) throws SQLException {
-
-    try (Connection conn = dataSource.getConnection()) {
-      UUID userId = UUID.randomUUID();
-
-      // Insert the user
-      String sql = "INSERT INTO \"user\" (user_id, username, display_name, email, " +
-                  "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)";
-
-      try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-        stmt.setObject(1, userId);
-        stmt.setString(2, username);
-        stmt.setString(3, displayName);
-        stmt.setString(4, email);
-        stmt.setTimestamp(5, java.sql.Timestamp.from(java.time.Instant.now()));
-        stmt.setTimestamp(6, java.sql.Timestamp.from(java.time.Instant.now()));
-
-        int rowsAffected = stmt.executeUpdate();
-        if (rowsAffected != 1) {
-          throw new RuntimeException("Failed to insert user");
-        }
-      }
-
-      // Insert a role for the user
-      sql = "INSERT INTO user_role (user_id, role_name) VALUES (?, ?)";
-      try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-        stmt.setObject(1, userId);
-        stmt.setString(2, roleName);
-
-        int rowsAffected = stmt.executeUpdate();
-        if (rowsAffected != 1) {
-          throw new RuntimeException("Failed to insert user role");
-        }
-      }
-
-      // Create an API key for the user using the security.ApiKey class
-      java.security.SecureRandom secureRandom = new java.security.SecureRandom();
-      com.goodmem.security.ApiKey securityApiKey = com.goodmem.security.ApiKey.newKey(secureRandom);
-
-      // Create a db.ApiKey from the security.ApiKey
-      UUID apiKeyId = UUID.randomUUID();
-      java.time.Instant now = java.time.Instant.now();
-      com.goodmem.db.ApiKey dbApiKey = new com.goodmem.db.ApiKey(
-          apiKeyId,
-          userId,
-          securityApiKey.displayPrefix(),
-          securityApiKey.hashedKeyMaterial(),
-          "ACTIVE",
-          java.util.Map.of(), // Empty labels
-          null, // No expiration
-          null, // No last used timestamp
-          now,
-          now,
-          createdByUserId,
-          createdByUserId
-      );
-
-      // Save the API key using the ApiKeys helper
-      com.goodmem.common.status.StatusOr<Integer> saveResult = com.goodmem.db.ApiKeys.save(conn, dbApiKey);
-
-      if (saveResult.isNotOk()) {
-        throw new RuntimeException("Failed to insert API key: " + saveResult.getStatus().getMessage());
-      }
-
-      if (saveResult.getValue() != 1) {
-        throw new RuntimeException("Failed to insert API key: unexpected rows affected: " + saveResult.getValue());
-      }
-
-      return userId;
     }
   }
 

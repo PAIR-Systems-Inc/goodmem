@@ -35,7 +35,7 @@ public final class Spaces {
   public static StatusOr<List<Space>> loadAll(Connection conn) {
     String sql =
         """
-        SELECT space_id, owner_id, name, labels, embedding_model, public_read,
+        SELECT space_id, owner_id, name, labels, embedder_id, public_read,
                created_at, updated_at, created_by_id, updated_by_id
           FROM space
         """;
@@ -66,7 +66,7 @@ public final class Spaces {
   public static StatusOr<Optional<Space>> loadById(Connection conn, UUID spaceId) {
     String sql =
         """
-        SELECT space_id, owner_id, name, labels, embedding_model, public_read,
+        SELECT space_id, owner_id, name, labels, embedder_id, public_read,
                created_at, updated_at, created_by_id, updated_by_id
           FROM space
          WHERE space_id = ?
@@ -99,7 +99,7 @@ public final class Spaces {
   public static StatusOr<List<Space>> loadByOwnerId(Connection conn, UUID ownerId) {
     String sql =
         """
-        SELECT space_id, owner_id, name, labels, embedding_model, public_read,
+        SELECT space_id, owner_id, name, labels, embedder_id, public_read,
                created_at, updated_at, created_by_id, updated_by_id
           FROM space
          WHERE owner_id = ?
@@ -135,7 +135,7 @@ public final class Spaces {
       Connection conn, UUID ownerId, String name) {
     String sql =
         """
-        SELECT space_id, owner_id, name, labels, embedding_model, public_read,
+        SELECT space_id, owner_id, name, labels, embedder_id, public_read,
                created_at, updated_at, created_by_id, updated_by_id
           FROM space
          WHERE owner_id = ? AND name = ?
@@ -170,14 +170,14 @@ public final class Spaces {
     String sql =
         """
         INSERT INTO space
-               (space_id, owner_id, name, labels, embedding_model, public_read,
+               (space_id, owner_id, name, labels, embedder_id, public_read,
                 created_at, updated_at, created_by_id, updated_by_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(space_id)
         DO UPDATE SET owner_id       = excluded.owner_id,
                       name           = excluded.name,
                       labels         = excluded.labels,
-                      embedding_model = excluded.embedding_model,
+                      embedder_id    = excluded.embedder_id,
                       public_read    = excluded.public_read,
                       updated_at     = excluded.updated_at,
                       updated_by_id  = excluded.updated_by_id
@@ -193,7 +193,7 @@ public final class Spaces {
         return StatusOr.ofStatus(labelsStatus);
       }
 
-      stmt.setString(5, space.embeddingModel());
+      stmt.setObject(5, space.embedderId());
       stmt.setBoolean(6, space.publicRead());
       stmt.setTimestamp(7, DbUtil.toSqlTimestamp(space.createdAt()));
       stmt.setTimestamp(8, DbUtil.toSqlTimestamp(space.updatedAt()));
@@ -244,7 +244,12 @@ public final class Spaces {
     }
 
     String name = rs.getString("name");
-    String embeddingModel = rs.getString("embedding_model");
+    
+    StatusOr<UUID> embedderIdOr = DbUtil.getUuid(rs, "embedder_id");
+    if (embedderIdOr.isNotOk()) {
+      return StatusOr.ofStatus(embedderIdOr.getStatus());
+    }
+    
     boolean publicRead = rs.getBoolean("public_read");
 
     // Parse the JSONB labels
@@ -280,7 +285,7 @@ public final class Spaces {
             ownerIdOr.getValue(),
             name,
             labels,
-            embeddingModel,
+            embedderIdOr.getValue(),
             publicRead,
             createdAtOr.getValue(),
             updatedAtOr.getValue(),
@@ -323,7 +328,7 @@ public final class Spaces {
     // Build the base query
     sqlBuilder.append(
         """
-        SELECT space_id, owner_id, name, labels, embedding_model, public_read,
+        SELECT space_id, owner_id, name, labels, embedder_id, public_read,
                created_at, updated_at, created_by_id, updated_by_id
           FROM space
          WHERE 1=1
@@ -445,7 +450,7 @@ public final class Spaces {
     allowedFields.put("created_at", "created_at");
     allowedFields.put("updated_at", "updated_at");
     allowedFields.put("created_time", "created_at"); // Alias for created_at to match API
-    allowedFields.put("embedding_model", "embedding_model");
+    allowedFields.put("embedder_id", "embedder_id");
     allowedFields.put("public_read", "public_read");
     
     // Return the matching field or default to created_at

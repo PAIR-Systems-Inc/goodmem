@@ -68,6 +68,7 @@ import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import io.javalin.plugin.bundled.CorsPluginConfig.CorsRule;
@@ -118,8 +119,10 @@ public class Main {
     var userServiceConfig = new UserServiceImpl.Config(dataSource);
 
     // Create service implementations with connection pool
+    // For the SpaceServiceImpl, use a default embedder ID (this would typically come from configuration)
+    java.util.UUID defaultEmbedderId = java.util.UUID.fromString("00000000-0000-0000-0000-000000000001"); // Placeholder UUID
     this.spaceServiceImpl = new SpaceServiceImpl(
-        new SpaceServiceImpl.Config(dataSource, "openai-ada-002"));
+        new SpaceServiceImpl.Config(dataSource, defaultEmbedderId));
     this.userServiceImpl = new UserServiceImpl(userServiceConfig);
     this.memoryServiceImpl = new MemoryServiceImpl(
         new MemoryServiceImpl.Config(dataSource, minioConfig));
@@ -342,8 +345,11 @@ public class Main {
       requestBuilder.setName((String) json.get("name"));
     }
 
-    if (json.containsKey("embedding_model")) {
-      requestBuilder.setEmbeddingModel((String) json.get("embedding_model"));
+    if (json.containsKey("embedder_id")) {
+      StatusOr<ByteString> embedderIdOr = convertHexToUuidBytes((String) json.get("embedder_id"));
+      if (embedderIdOr.isOk()) {
+        requestBuilder.setEmbedderId(embedderIdOr.getValue());
+      }
     }
 
     if (json.containsKey("public_read")) {
@@ -1038,7 +1044,7 @@ public class Main {
     map.put("space_id", Uuids.bytesToHex(space.getSpaceId().toByteArray()));
     map.put("name", space.getName());
     map.put("labels", space.getLabelsMap());
-    map.put("embedding_model", space.getEmbeddingModel());
+    map.put("embedder_id", Uuids.bytesToHex(space.getEmbedderId().toByteArray()));
     map.put("created_at", Timestamps.toMillis(space.getCreatedAt()));
     map.put("updated_at", Timestamps.toMillis(space.getUpdatedAt()));
     map.put("owner_id", Uuids.bytesToHex(space.getOwnerId().toByteArray()));

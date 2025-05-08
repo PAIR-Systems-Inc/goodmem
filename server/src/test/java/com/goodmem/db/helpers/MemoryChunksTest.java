@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.goodmem.common.status.StatusOr;
 import com.goodmem.db.*;
 import com.goodmem.db.util.PostgresTestHelper;
+import com.goodmem.db.helpers.EntityHelper;
 import com.goodmem.db.util.PostgresTestHelper.PostgresContext;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -266,19 +267,21 @@ public class MemoryChunksTest {
   // Helper methods to set up test data
 
   private static UUID createTestUser() {
-    UUID userId = UUID.randomUUID();
-    Instant now = Instant.now();
-    User user = new User(userId, "testuser", "test@example.com", "Test User", now, now);
-    Users.save(connection, user);
-    return userId;
+    return EntityHelper.createTestUserWithKey(connection).userId();
+  }
+
+  private static UUID createTestEmbedder(UUID embedderId) {
+    return EntityHelper.createTestEmbedder(connection, embedderId, testUserId);
   }
 
   private static UUID createTestSpace(UUID ownerId) {
     UUID spaceId = UUID.randomUUID();
     Instant now = Instant.now();
+    UUID embedderId = createTestEmbedder(
+        UUID.fromString("00000000-0000-0000-0000-000000000001")); // Test embedder ID
     Space space =
         new Space(
-            spaceId, ownerId, "test-space", Map.of(), "ada-002", false, now, now, ownerId, ownerId);
+            spaceId, ownerId, "test-space", Map.of(), embedderId, false, now, now, ownerId, ownerId);
     Spaces.save(connection, space);
     return spaceId;
   }

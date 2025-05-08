@@ -58,7 +58,7 @@ public final class RestMapper {
     map.put(formatName("spaceId", convention), Uuids.bytesToHex(space.getSpaceId().toByteArray()));
     map.put(formatName("name", convention), space.getName());
     map.put(formatName("labels", convention), space.getLabelsMap());
-    map.put(formatName("embeddingModel", convention), space.getEmbeddingModel());
+    map.put(formatName("embedderId", convention), Uuids.bytesToHex(space.getEmbedderId().toByteArray()));
     map.put(formatName("createdAt", convention), formatTimestamp(space.getCreatedAt()));
     map.put(formatName("updatedAt", convention), formatTimestamp(space.getUpdatedAt()));
     map.put(formatName("ownerId", convention), Uuids.bytesToHex(space.getOwnerId().toByteArray()));

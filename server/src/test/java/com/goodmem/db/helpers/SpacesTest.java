@@ -5,8 +5,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.goodmem.common.status.StatusOr;
 import com.goodmem.db.Space;
 import com.goodmem.db.Spaces;
-import com.goodmem.db.User;
-import com.goodmem.db.Users;
 import com.goodmem.db.util.PostgresTestHelper;
 import com.goodmem.db.util.PostgresTestHelper.PostgresContext;
 import java.sql.Connection;
@@ -71,8 +69,8 @@ public class SpacesTest {
   @Test
   void testLoadAll_ReturnsAllSpaces_WhenMultipleExist() {
     // Given: Multiple spaces in the database
-    Space space1 = createTestSpace("space1", "ada-002", false);
-    Space space2 = createTestSpace("space2", "ada-002", true);
+    Space space1 = createTestSpace("space1", false);
+    Space space2 = createTestSpace("space2", true);
 
     Spaces.save(connection, space1);
     Spaces.save(connection, space2);
@@ -93,7 +91,7 @@ public class SpacesTest {
   @Test
   void testLoadById_ReturnsSpace_WhenExists() {
     // Given: A space in the database
-    Space space = createTestSpace("testspace", "ada-002", false);
+    Space space = createTestSpace("testspace", false);
     Spaces.save(connection, space);
 
     // When: We load the space by ID
@@ -103,8 +101,9 @@ public class SpacesTest {
     assertTrue(result.isOk());
     assertTrue(result.getValue().isPresent());
     assertEquals("testspace", result.getValue().get().name());
-    assertEquals("ada-002", result.getValue().get().embeddingModel());
-    assertEquals(false, result.getValue().get().publicRead());
+    // Check that the embedder ID is correctly set
+    assertEquals(UUID.fromString("00000000-0000-0000-0000-000000000001"), result.getValue().get().embedderId());
+    assertFalse(result.getValue().get().publicRead());
   }
 
   @Test
@@ -123,8 +122,8 @@ public class SpacesTest {
   @Test
   void testLoadByOwnerId_ReturnsSpaces_WhenExistForOwner() {
     // Given: Multiple spaces for the same owner
-    Space space1 = createTestSpace("ownerspace1", "ada-002", false);
-    Space space2 = createTestSpace("ownerspace2", "ada-002", true);
+    Space space1 = createTestSpace("ownerspace1", false);
+    Space space2 = createTestSpace("ownerspace2", true);
 
     Spaces.save(connection, space1);
     Spaces.save(connection, space2);
@@ -145,7 +144,7 @@ public class SpacesTest {
   @Test
   void testLoadByOwnerAndName_ReturnsSpace_WhenExists() {
     // Given: A space with a specific owner and name
-    Space space = createTestSpace("uniquename", "ada-002", false);
+    Space space = createTestSpace("uniquename", false);
     Spaces.save(connection, space);
 
     // When: We load the space by owner and name
@@ -173,7 +172,7 @@ public class SpacesTest {
   @Test
   void testSave_CreatesNewSpace_WhenIdDoesNotExist() {
     // Given: A new space
-    Space space = createTestSpace("newspace", "ada-002", false);
+    Space space = createTestSpace("newspace", false);
 
     // When: We save the space
     StatusOr<Integer> result = Spaces.save(connection, space);
@@ -190,8 +189,13 @@ public class SpacesTest {
 
   @Test
   void testSave_UpdatesExistingSpace_WhenIdExists() {
+    var uuid2 = EntityHelper.createTestEmbedder(
+        connection,
+        UUID.fromString("00000000-0000-0000-0000-000000000002"),
+        testUserId);
+
     // Given: An existing space
-    Space space = createTestSpace("updatespace", "ada-002", false);
+    Space space = createTestSpace("updatespace", false);
     Spaces.save(connection, space);
 
     // When: We update the space
@@ -202,7 +206,7 @@ public class SpacesTest {
             space.ownerId(),
             space.name(),
             space.labels(),
-            "text-embedding-3-large", // Changed embedding model
+            uuid2, // Changed embedder ID
             true, // Changed publicRead to true
             space.createdAt(),
             now, // Updated updatedAt
@@ -218,18 +222,18 @@ public class SpacesTest {
     StatusOr<Optional<Space>> loadResult = Spaces.loadById(connection, space.spaceId());
     assertTrue(loadResult.isOk());
     assertTrue(loadResult.getValue().isPresent());
-    assertEquals("text-embedding-3-large", loadResult.getValue().get().embeddingModel());
+    assertEquals(uuid2, loadResult.getValue().get().embedderId());
     assertTrue(loadResult.getValue().get().publicRead());
   }
 
   @Test
   void testSave_EnforcesUniqueConstraint_OnOwnerAndName() {
     // Given: An existing space
-    Space space1 = createTestSpace("uniquespace", "ada-002", false);
+    Space space1 = createTestSpace("uniquespace", false);
     Spaces.save(connection, space1);
 
     // When: We try to save another space with the same owner and name
-    Space space2 = createTestSpace("uniquespace", "ada-002", true);
+    Space space2 = createTestSpace("uniquespace", true);
     StatusOr<Integer> result = Spaces.save(connection, space2);
 
     // Then: The operation fails due to unique constraint violation
@@ -243,7 +247,7 @@ public class SpacesTest {
   @Test
   void testDelete_RemovesSpace_WhenExists() {
     // Given: An existing space
-    Space space = createTestSpace("deletespace", "ada-002", false);
+    Space space = createTestSpace("deletespace", false);
     Spaces.save(connection, space);
 
     // When: We delete the space
@@ -275,22 +279,25 @@ public class SpacesTest {
   // Helper methods to set up test data
 
   private static UUID createTestUser() {
-    UUID userId = UUID.randomUUID();
-    Instant now = Instant.now();
-    User user = new User(userId, "testuser", "test@example.com", "Test User", now, now);
-    Users.save(connection, user);
-    return userId;
+    return EntityHelper.createTestUserWithKey(connection).userId();
   }
 
-  private Space createTestSpace(String name, String embeddingModel, boolean publicRead) {
+  private Space createTestSpace(String name, boolean publicRead) {
     UUID spaceId = UUID.randomUUID();
     Instant now = Instant.now();
+
+    UUID embedderUUID;
+    embedderUUID = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    
+    // Create the test embedder in the database
+    EntityHelper.createTestEmbedder(connection, embedderUUID, testUserId);
+    
     return new Space(
         spaceId,
         testUserId,
         name,
         Map.of(), // Empty labels
-        embeddingModel,
+        embedderUUID,
         publicRead,
         now,
         now,

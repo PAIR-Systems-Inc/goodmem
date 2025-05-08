@@ -30,19 +30,19 @@ const (
 //	bot  – identifies the agent/bot
 //	org  – identifies the organisation or tenant
 type Space struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	SpaceId        []byte                 `protobuf:"bytes,1,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`                                                          // UUID (16 bytes)
-	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                                                                               // human-friendly name, unique per owner
-	Labels         map[string]string      `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // arbitrary k-v pairs, includes reserved keys
-	EmbeddingModel string                 `protobuf:"bytes,4,opt,name=embedding_model,json=embeddingModel,proto3" json:"embedding_model,omitempty"`                                     // e.g. "openai-ada-002"
-	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	OwnerId        []byte                 `protobuf:"bytes,6,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`                // User UUID (16 bytes)
-	PublicRead     bool                   `protobuf:"varint,7,opt,name=public_read,json=publicRead,proto3" json:"public_read,omitempty"`      // if true, anyone may query
-	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`          // Added for consistency
-	CreatedById    []byte                 `protobuf:"bytes,9,opt,name=created_by_id,json=createdById,proto3" json:"created_by_id,omitempty"`  // User UUID (16 bytes) - Added
-	UpdatedById    []byte                 `protobuf:"bytes,10,opt,name=updated_by_id,json=updatedById,proto3" json:"updated_by_id,omitempty"` // User UUID (16 bytes) - Added
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SpaceId       []byte                 `protobuf:"bytes,1,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`                                                          // UUID (16 bytes)
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                                                                               // human-friendly name, unique per owner
+	Labels        map[string]string      `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // arbitrary k-v pairs, includes reserved keys
+	EmbedderId    []byte                 `protobuf:"bytes,4,opt,name=embedder_id,json=embedderId,proto3,oneof" json:"embedder_id,omitempty"`                                           // Reference to an Embedder UUID (16 bytes)
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	OwnerId       []byte                 `protobuf:"bytes,6,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`                // User UUID (16 bytes)
+	PublicRead    bool                   `protobuf:"varint,7,opt,name=public_read,json=publicRead,proto3" json:"public_read,omitempty"`      // if true, anyone may query
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`          // Added for consistency
+	CreatedById   []byte                 `protobuf:"bytes,9,opt,name=created_by_id,json=createdById,proto3" json:"created_by_id,omitempty"`  // User UUID (16 bytes) - Added
+	UpdatedById   []byte                 `protobuf:"bytes,10,opt,name=updated_by_id,json=updatedById,proto3" json:"updated_by_id,omitempty"` // User UUID (16 bytes) - Added
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Space) Reset() {
@@ -96,11 +96,11 @@ func (x *Space) GetLabels() map[string]string {
 	return nil
 }
 
-func (x *Space) GetEmbeddingModel() string {
+func (x *Space) GetEmbedderId() []byte {
 	if x != nil {
-		return x.EmbeddingModel
+		return x.EmbedderId
 	}
-	return ""
+	return nil
 }
 
 func (x *Space) GetCreatedAt() *timestamppb.Timestamp {
@@ -146,14 +146,14 @@ func (x *Space) GetUpdatedById() []byte {
 }
 
 type CreateSpaceRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Labels         map[string]string      `protobuf:"bytes,2,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	EmbeddingModel string                 `protobuf:"bytes,3,opt,name=embedding_model,json=embeddingModel,proto3" json:"embedding_model,omitempty"`
-	PublicRead     bool                   `protobuf:"varint,4,opt,name=public_read,json=publicRead,proto3" json:"public_read,omitempty"`
-	OwnerId        []byte                 `protobuf:"bytes,5,opt,name=owner_id,json=ownerId,proto3,oneof" json:"owner_id,omitempty"` // Optional: if not provided, derived from auth context. If provided, requires CREATE_SPACE_ANY permission.
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Labels        map[string]string      `protobuf:"bytes,2,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	EmbedderId    []byte                 `protobuf:"bytes,3,opt,name=embedder_id,json=embedderId,proto3,oneof" json:"embedder_id,omitempty"` // Reference to an Embedder UUID (16 bytes)
+	PublicRead    bool                   `protobuf:"varint,4,opt,name=public_read,json=publicRead,proto3" json:"public_read,omitempty"`
+	OwnerId       []byte                 `protobuf:"bytes,5,opt,name=owner_id,json=ownerId,proto3,oneof" json:"owner_id,omitempty"` // Optional: if not provided, derived from auth context. If provided, requires CREATE_SPACE_ANY permission.
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateSpaceRequest) Reset() {
@@ -200,11 +200,11 @@ func (x *CreateSpaceRequest) GetLabels() map[string]string {
 	return nil
 }
 
-func (x *CreateSpaceRequest) GetEmbeddingModel() string {
+func (x *CreateSpaceRequest) GetEmbedderId() []byte {
 	if x != nil {
-		return x.EmbeddingModel
+		return x.EmbedderId
 	}
-	return ""
+	return nil
 }
 
 func (x *CreateSpaceRequest) GetPublicRead() bool {
@@ -670,12 +670,13 @@ var File_goodmem_v1_space_proto protoreflect.FileDescriptor
 const file_goodmem_v1_space_proto_rawDesc = "" +
 	"\n" +
 	"\x16goodmem/v1/space.proto\x12\n" +
-	"goodmem.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17goodmem/v1/common.proto\"\xcb\x03\n" +
+	"goodmem.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17goodmem/v1/common.proto\"\xd8\x03\n" +
 	"\x05Space\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\fR\aspaceId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x125\n" +
-	"\x06labels\x18\x03 \x03(\v2\x1d.goodmem.v1.Space.LabelsEntryR\x06labels\x12'\n" +
-	"\x0fembedding_model\x18\x04 \x01(\tR\x0eembeddingModel\x129\n" +
+	"\x06labels\x18\x03 \x03(\v2\x1d.goodmem.v1.Space.LabelsEntryR\x06labels\x12$\n" +
+	"\vembedder_id\x18\x04 \x01(\fH\x00R\n" +
+	"embedderId\x88\x01\x01\x129\n" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x19\n" +
 	"\bowner_id\x18\x06 \x01(\fR\aownerId\x12\x1f\n" +
@@ -688,17 +689,20 @@ const file_goodmem_v1_space_proto_rawDesc = "" +
 	" \x01(\fR\vupdatedById\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9e\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
+	"\f_embedder_id\"\xab\x02\n" +
 	"\x12CreateSpaceRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12B\n" +
-	"\x06labels\x18\x02 \x03(\v2*.goodmem.v1.CreateSpaceRequest.LabelsEntryR\x06labels\x12'\n" +
-	"\x0fembedding_model\x18\x03 \x01(\tR\x0eembeddingModel\x12\x1f\n" +
+	"\x06labels\x18\x02 \x03(\v2*.goodmem.v1.CreateSpaceRequest.LabelsEntryR\x06labels\x12$\n" +
+	"\vembedder_id\x18\x03 \x01(\fH\x00R\n" +
+	"embedderId\x88\x01\x01\x12\x1f\n" +
 	"\vpublic_read\x18\x04 \x01(\bR\n" +
 	"publicRead\x12\x1e\n" +
-	"\bowner_id\x18\x05 \x01(\fH\x00R\aownerId\x88\x01\x01\x1a9\n" +
+	"\bowner_id\x18\x05 \x01(\fH\x01R\aownerId\x88\x01\x01\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\v\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
+	"\f_embedder_idB\v\n" +
 	"\t_owner_id\",\n" +
 	"\x0fGetSpaceRequest\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\fR\aspaceId\"\xf2\x03\n" +
@@ -834,6 +838,7 @@ func file_goodmem_v1_space_proto_init() {
 		return
 	}
 	file_goodmem_v1_common_proto_init()
+	file_goodmem_v1_space_proto_msgTypes[0].OneofWrappers = []any{}
 	file_goodmem_v1_space_proto_msgTypes[1].OneofWrappers = []any{}
 	file_goodmem_v1_space_proto_msgTypes[3].OneofWrappers = []any{}
 	file_goodmem_v1_space_proto_msgTypes[5].OneofWrappers = []any{}

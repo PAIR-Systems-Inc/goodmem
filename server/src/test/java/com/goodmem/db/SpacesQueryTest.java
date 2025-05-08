@@ -4,10 +4,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import com.goodmem.SpaceServiceImpl;
 import com.goodmem.common.status.StatusOr;
 import com.goodmem.db.Spaces.QueryResult;
+import com.goodmem.db.helpers.EntityHelper;
 import com.goodmem.db.util.DbUtil;
-import com.goodmem.SpaceServiceImpl;
 import com.goodmem.db.util.PostgresTestHelper;
 import com.goodmem.db.util.PostgresTestHelper.PostgresContext;
 import com.zaxxer.hikari.HikariConfig;
@@ -25,7 +26,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -60,12 +60,8 @@ public class SpacesQueryTest {
     
     // Create test data
     try (Connection conn = dataSource.getConnection()) {
-      // Create test users first
-      ownerA = UUID.randomUUID();
-      ownerB = UUID.randomUUID();
-      
-      createTestUser(conn, ownerA, "userA", "User A");
-      createTestUser(conn, ownerB, "userB", "User B");
+      ownerA = EntityHelper.createTestUserWithKey(conn).userId();
+      ownerB = EntityHelper.createTestUserWithKey(conn).userId();
       
       // Create test spaces with various attributes
       createTestSpaces(conn);
@@ -523,25 +519,6 @@ public class SpacesQueryTest {
   }
   
   /**
-   * Creates test users in the database.
-   */
-  private static void createTestUser(Connection conn, UUID userId, String username, String displayName) 
-      throws SQLException {
-    try (PreparedStatement stmt = conn.prepareStatement(
-        "INSERT INTO \"user\" (user_id, username, email, display_name, created_at, updated_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?)")) {
-      stmt.setObject(1, userId);
-      stmt.setString(2, username);
-      stmt.setString(3, username + "@example.com");
-      stmt.setString(4, displayName);
-      Timestamp now = Timestamp.from(Instant.now());
-      stmt.setTimestamp(5, now);
-      stmt.setTimestamp(6, now);
-      stmt.executeUpdate();
-    }
-  }
-  
-  /**
    * Creates test spaces with various attributes.
    */
   private static void createTestSpaces(Connection conn) throws SQLException {
@@ -605,27 +582,36 @@ public class SpacesQueryTest {
       boolean publicRead) throws SQLException {
     
     UUID spaceId = UUID.randomUUID();
-    Timestamp now = Timestamp.from(Instant.now());
+    Instant now = Instant.now();
+    UUID embedderId = UUID.fromString("00000000-0000-0000-0000-000000000001");
     
-    try (PreparedStatement stmt = conn.prepareStatement(
-        "INSERT INTO space (space_id, owner_id, name, labels, embedding_model, public_read, " +
-        "created_at, updated_at, created_by_id, updated_by_id) " +
-        "VALUES (?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?)")) {
-      stmt.setObject(1, spaceId);
-      stmt.setObject(2, ownerId);
-      stmt.setString(3, name);
-      com.goodmem.common.status.StatusOr<String> jsonbResult = DbUtil.mapToJsonb(labels);
-      if (jsonbResult.isNotOk()) {
-        throw new RuntimeException("Failed to convert labels to JSONB: " + jsonbResult.getStatus().getMessage());
+    // Create an embedder if it doesn't exist yet (for the first call)
+    try {
+      EntityHelper.createTestEmbedder(conn, embedderId, createdById);
+    } catch (RuntimeException e) {
+      // Ignore if embedder already exists
+      if (!e.getMessage().contains("duplicate key")) {
+        throw e;
       }
-      stmt.setString(4, jsonbResult.getValue());
-      stmt.setString(5, "openai-ada-002");
-      stmt.setBoolean(6, publicRead);
-      stmt.setTimestamp(7, now);
-      stmt.setTimestamp(8, now);
-      stmt.setObject(9, createdById);
-      stmt.setObject(10, createdById);
-      stmt.executeUpdate();
+    }
+
+    // Create a Space record
+    Space space = new Space(
+        spaceId,
+        ownerId,
+        name,
+        labels,
+        embedderId,
+        publicRead,
+        now,
+        now,
+        createdById,
+        createdById);
+    
+    // Save the space using Spaces.save()
+    StatusOr<Integer> result = Spaces.save(conn, space);
+    if (result.isNotOk()) {
+      throw new SQLException("Failed to save space: " + result.getStatus().getMessage());
     }
     
     return spaceId;

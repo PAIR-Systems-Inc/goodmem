@@ -50,7 +50,7 @@ public class RecordConverterTest {
             ownerId,
             "Test Space",
             Map.of("key1", "value1"),
-            "openai-ada-002",
+            UUID.fromString("00000000-0000-0000-0000-000000000001"), // Test embedder ID
             true,
             now,
             now,
@@ -64,7 +64,8 @@ public class RecordConverterTest {
     assertEquals(spaceId, UuidUtil.fromProtoBytes(proto.getSpaceId()).getValue());
     assertEquals(ownerId, UuidUtil.fromProtoBytes(proto.getOwnerId()).getValue());
     assertEquals("Test Space", proto.getName());
-    assertEquals("openai-ada-002", proto.getEmbeddingModel());
+    assertEquals(UUID.fromString("00000000-0000-0000-0000-000000000001"), 
+                 UuidUtil.fromProtoBytes(proto.getEmbedderId()).getValue());
     assertTrue(proto.getPublicRead());
     assertEquals(
         now.toEpochMilli(), DbUtil.fromProtoTimestamp(proto.getCreatedAt()).toEpochMilli());

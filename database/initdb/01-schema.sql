@@ -55,13 +55,64 @@ CREATE INDEX idx_apikey_status ON apikey (status);
 CREATE INDEX idx_apikey_created_by_id ON apikey (created_by_id);
 CREATE INDEX idx_apikey_updated_by_id ON apikey (updated_by_id);
 
+-- ENUM for modality types
+CREATE TYPE modality_enum AS ENUM (
+  'TEXT',
+  'IMAGE',
+  'AUDIO',
+  'VIDEO'
+);
+
+-- ENUM for embedder provider types
+CREATE TYPE provider_type_enum AS ENUM (
+  'OPENAI',
+  'VLLM',
+  'TEI'          -- covers both native and OpenAI-compatible TEI endpoints
+);
+
+-- Table for Embedders
+CREATE TABLE embedder (
+    embedder_id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    /* user-facing */
+    display_name           VARCHAR(255) NOT NULL,
+    description            TEXT,
+
+    /* connection details */
+    provider_type          provider_type_enum NOT NULL,
+    endpoint_url           TEXT NOT NULL,                    -- e.g. https://api.openai.com
+    api_path               TEXT NOT NULL DEFAULT '/v1/embeddings',
+    model_identifier       TEXT NOT NULL,                    -- e.g. text-embedding-3-small
+    dimensionality         INT NOT NULL CHECK (dimensionality > 0), -- output vector size
+    max_sequence_length    INT,
+    supported_modalities   modality_enum[] NOT NULL DEFAULT ARRAY['TEXT']::modality_enum[],
+
+    /* credentials - will eventually be encrypted */
+    credentials            TEXT,
+
+    /* labels & MLOps info */
+    labels                 JSONB,
+    version                VARCHAR(64),
+    monitoring_endpoint    TEXT,
+
+    /* ownership & audit */
+    owner_id               UUID NOT NULL REFERENCES "user"(user_id),
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
+    created_by_id          UUID NOT NULL REFERENCES "user"(user_id),
+    updated_by_id          UUID NOT NULL REFERENCES "user"(user_id),
+
+    /* avoid duplicate registrations */
+    UNIQUE (endpoint_url, api_path, model_identifier)
+);
+
 -- Table for Spaces
 CREATE TABLE space (
     space_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     owner_id UUID NOT NULL REFERENCES "user"(user_id),
     name VARCHAR(255) NOT NULL,
     labels JSONB,
-    embedding_model VARCHAR(100) NOT NULL,
+    embedder_id UUID NOT NULL REFERENCES embedder(embedder_id),
     public_read BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
@@ -123,57 +174,6 @@ CREATE INDEX idx_memory_chunk_embedding_vector ON memory_chunk USING hnsw (embed
 -- CREATE TYPE api_key_status AS ENUM ('ACTIVE', 'INACTIVE');
 -- CREATE TYPE processing_status_enum AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED');
 -- CREATE TYPE vector_status_enum AS ENUM ('PENDING', 'GENERATED', 'FAILED');
-
--- ENUM for modality types
-CREATE TYPE modality_enum AS ENUM (
-  'TEXT',
-  'IMAGE',
-  'AUDIO',
-  'VIDEO'
-);
-
--- ENUM for embedder provider types
-CREATE TYPE provider_type_enum AS ENUM (
-  'OPENAI',
-  'VLLM',
-  'TEI'          -- covers both native and OpenAI-compatible TEI endpoints
-);
-
--- Table for Embedders
-CREATE TABLE embedder (
-    embedder_id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-
-    /* user-facing */
-    display_name           VARCHAR(255) NOT NULL,
-    description            TEXT,
-
-    /* connection details */
-    provider_type          provider_type_enum NOT NULL,
-    endpoint_url           TEXT NOT NULL,                    -- e.g. https://api.openai.com
-    api_path               TEXT NOT NULL DEFAULT '/v1/embeddings',
-    model_identifier       TEXT NOT NULL,                    -- e.g. text-embedding-3-small
-    dimensionality         INT NOT NULL CHECK (dimensionality > 0), -- output vector size
-    max_sequence_length    INT,
-    supported_modalities   modality_enum[] NOT NULL DEFAULT ARRAY['TEXT']::modality_enum[],
-
-    /* credentials - will eventually be encrypted */
-    credentials            TEXT,
-
-    /* labels & MLOps info */
-    labels                 JSONB,
-    version                VARCHAR(64),
-    monitoring_endpoint    TEXT,
-
-    /* ownership & audit */
-    owner_id               UUID NOT NULL REFERENCES "user"(user_id),
-    created_at             TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
-    updated_at             TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
-    created_by_id          UUID NOT NULL REFERENCES "user"(user_id),
-    updated_by_id          UUID NOT NULL REFERENCES "user"(user_id),
-
-    /* avoid duplicate registrations */
-    UNIQUE (endpoint_url, api_path, model_identifier)
-);
 
 -- Trigger function to update 'updated_at' timestamps automatically
 CREATE OR REPLACE FUNCTION trigger_set_timestamp()

@@ -33,10 +33,10 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
   private final Config config;
 
   /**
-   * @param dataSource
-   * @param defaultEmbeddingModel
+   * @param dataSource The database connection source
+   * @param defaultEmbedderId The default embedder UUID to use if not specified
    */
-  public record Config(HikariDataSource dataSource, String defaultEmbeddingModel) {}
+  public record Config(HikariDataSource dataSource, UUID defaultEmbedderId) {}
   
   public SpaceServiceImpl(Config config) {
     this.config = config;
@@ -134,10 +134,24 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
     // Creator is always the authenticated user
     UUID creatorId = authenticatedUser.getId();
 
-    // Determine the embedding model to use (default if not specified)
-    String embeddingModel = request.getEmbeddingModel();
-    if (embeddingModel == null || embeddingModel.isEmpty()) {
-      embeddingModel = config.defaultEmbeddingModel();
+    // Determine the embedder to use (default if not specified)
+    UUID embedderId;
+    if (request.hasEmbedderId()) {
+      com.goodmem.common.status.StatusOr<UUID> embedderIdOr = 
+          com.goodmem.db.util.UuidUtil.fromProtoBytes(request.getEmbedderId());
+      
+      if (embedderIdOr.isNotOk()) {
+        Logger.error("Invalid embedder ID format: {}", embedderIdOr.getStatus().getMessage());
+        responseObserver.onError(
+            io.grpc.Status.INVALID_ARGUMENT
+                .withDescription("Invalid embedder ID format")
+                .asRuntimeException());
+        return;
+      }
+      
+      embedderId = embedderIdOr.getValue();
+    } else {
+      embedderId = config.defaultEmbedderId();
     }
 
     try (java.sql.Connection connection = config.dataSource().getConnection()) {
@@ -172,7 +186,7 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
           ownerId,
           request.getName(),
           request.getLabelsMap(),
-          embeddingModel,
+          embedderId,
           request.getPublicRead(),
           now,
           now,
@@ -214,6 +228,7 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
 
   @Override
   public void getSpace(GetSpaceRequest request, StreamObserver<Space> responseObserver) {
+    // TODO(claude): you need to fix this. This is a fake method.
     Logger.info("Getting space: {}", Uuids.bytesToHex(request.getSpaceId()));
 
     // TODO: Validate space ID
@@ -227,7 +242,7 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
             .setName("Example Space")
             .putLabels("user", "alice")
             .putLabels("bot", "copilot")
-            .setEmbeddingModel("openai-ada-002")
+            .setEmbedderId(UuidUtil.toProtoBytes(UUID.randomUUID()))
             .setCreatedAt(getCurrentTimestamp())
             .setUpdatedAt(getCurrentTimestamp())
             .setOwnerId(Uuids.getBytesFromUUID(UUID.randomUUID()))
@@ -798,7 +813,7 @@ public class SpaceServiceImpl extends SpaceServiceImplBase {
           existingSpace.ownerId(),
           newName,
           newLabels,
-          existingSpace.embeddingModel(), // embedding model is immutable
+          existingSpace.embedderId(), // embedder_id is immutable
           newPublicRead,
           existingSpace.createdAt(),
           now, // updated now
