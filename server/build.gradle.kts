@@ -60,7 +60,7 @@ dependencies {
     testImplementation("org.testcontainers:junit-jupiter:1.20.0")
     testImplementation("org.testcontainers:postgresql:1.20.0")
     testImplementation("org.mockito:mockito-core:5.17.0")
-    testImplementation("org.mockito:mockito-junit-jupiter:5.8.0")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.17.0")
     
     // gRPC testing
     testImplementation("io.grpc:grpc-testing:${grpcVersion}")
