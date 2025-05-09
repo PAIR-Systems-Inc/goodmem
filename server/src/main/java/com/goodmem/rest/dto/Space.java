@@ -10,7 +10,6 @@ import io.javalin.openapi.OpenApiNullable;
 import io.javalin.openapi.OpenApiByFields;
 import io.javalin.openapi.OpenApiRequired;
 import io.javalin.openapi.OpenApiStringValidation;
-import io.javalin.openapi.OpenApiTimestampFormat;
 import io.javalin.openapi.Visibility;
 
 /**
@@ -52,13 +51,11 @@ public record Space(
     @OpenApiDescription("Timestamp when this space was created (milliseconds since epoch).")
     @OpenApiExample("1651483320000")
     @OpenApiRequired
-    @OpenApiTimestampFormat("milliseconds-since-epoch")
     Long createdAt,
     
     @OpenApiDescription("Timestamp when this space was last updated (milliseconds since epoch).")
     @OpenApiExample("1651483320000")
     @OpenApiRequired
-    @OpenApiTimestampFormat("milliseconds-since-epoch")
     Long updatedAt,
     
     @OpenApiDescription("The ID of the user who owns this space.")

@@ -29,7 +29,6 @@ import goodmem.v1.Apikey.DeleteApiKeyRequest;
 import goodmem.v1.Apikey.ListApiKeysRequest;
 import goodmem.v1.Apikey.ListApiKeysResponse;
 import goodmem.v1.Apikey.UpdateApiKeyRequest;
-import goodmem.v1.Common;
 import goodmem.v1.Common.StringMap;
 import goodmem.v1.EmbedderOuterClass.CreateEmbedderRequest;
 import goodmem.v1.EmbedderOuterClass.DeleteEmbedderRequest;
@@ -47,11 +46,6 @@ import goodmem.v1.MemoryOuterClass.ListMemoriesResponse;
 import goodmem.v1.MemoryOuterClass.Memory;
 import goodmem.v1.MemoryServiceGrpc;
 import goodmem.v1.SpaceOuterClass;
-import goodmem.v1.SpaceOuterClass.DeleteSpaceRequest;
-import goodmem.v1.SpaceOuterClass.GetSpaceRequest;
-import goodmem.v1.SpaceOuterClass.ListSpacesRequest;
-import goodmem.v1.SpaceOuterClass.ListSpacesResponse;
-import goodmem.v1.SpaceOuterClass.UpdateSpaceRequest;
 import goodmem.v1.SpaceServiceGrpc;
 import goodmem.v1.UserOuterClass.GetUserRequest;
 import goodmem.v1.UserOuterClass.User;
@@ -405,8 +399,8 @@ public class Main {
                                   "{id}",
                                   () -> {
                                     get(this::handleGetSpace);
-//                                    put(this::handleUpdateSpace);
-//                                    delete(this::handleDeleteSpace);
+                                    put(this::handleUpdateSpace);
+                                    delete(this::handleDeleteSpace);
                                   });
                             });
 
@@ -484,6 +478,11 @@ public class Main {
   }
 
   // Space handlers
+
+  /**
+   * TODO(claude): add good Javadoc
+   * @param ctx
+   */
   @OpenApi(
       path = "/v1/spaces",
       methods = { HttpMethod.POST },
@@ -590,6 +589,12 @@ public class Main {
     ctx.json(responseDto);
   }
 
+  /**
+   * Handles a REST request to retrieve a Space by ID. Converts the hex UUID to binary format and
+   * calls the gRPC service.
+   *
+   * @param ctx The Javalin context containing the request and response
+   */
   @OpenApi(
       path = "/v1/spaces/{id}",
       methods = { HttpMethod.GET },
@@ -623,12 +628,6 @@ public class Main {
               status = "404",
               description = "Not found - space with the specified ID does not exist")
       })
-  /**
-   * Handles a REST request to retrieve a Space by ID. Converts the hex UUID to binary format and
-   * calls the gRPC service.
-   *
-   * @param ctx The Javalin context containing the request and response
-   */
   private void handleGetSpace(Context ctx) {
     String spaceIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
@@ -669,6 +668,12 @@ public class Main {
     ctx.json(responseDto);
   }
 
+  /**
+   * Handles a REST request to list spaces with optional filtering and pagination. Converts query
+   * parameters to the gRPC request format and calls the gRPC service.
+   *
+   * @param ctx The Javalin context containing the request and response
+   */
   @OpenApi(
       path = "/v1/spaces",
       methods = { HttpMethod.GET },
@@ -724,7 +729,7 @@ public class Main {
           @OpenApiResponse(
               status = "200",
               description = "Successfully retrieved spaces",
-              content = @OpenApiContent(from = ListSpacesResponse.class)),
+              content = @OpenApiContent(from = com.goodmem.rest.dto.ListSpacesResponse.class)),
           @OpenApiResponse(
               status = "400",
               description = "Invalid request - invalid filter parameters or pagination token"),
@@ -735,12 +740,6 @@ public class Main {
               status = "403",
               description = "Forbidden - insufficient permissions to list spaces")
       })
-  /**
-   * Handles a REST request to list spaces with optional filtering and pagination. Converts query
-   * parameters to the gRPC request format and calls the gRPC service.
-   *
-   * @param ctx The Javalin context containing the request and response
-   */
   private void handleListSpaces(Context ctx) {
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST ListSpaces request with API key: {}", apiKey);
@@ -857,51 +856,131 @@ public class Main {
 
   /**
    * Handles a REST request to update a Space by ID. Converts the hex UUID to binary format, builds
-   * the update request from JSON, and calls the gRPC service.
+   * the update request from the DTO, and calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
+  @OpenApi(
+      path = "/v1/spaces/{id}",
+      methods = { HttpMethod.PUT },
+      summary = "Update a space",
+      description = "Updates an existing space with new values for the specified fields. Fields not included in the request remain unchanged.",
+      operationId = "updateSpace",
+      tags = "Spaces",
+      pathParams = {
+          @io.javalin.openapi.OpenApiParam(
+              name = "id",
+              description = "The unique identifier of the space to update",
+              required = true,
+              type = String.class,
+              example = "550e8400-e29b-41d4-a716-446655440000")
+      },
+      requestBody =
+          @OpenApiRequestBody(
+              description = "Space update details",
+              required = true,
+              content =
+                  @OpenApiContent(
+                      from = com.goodmem.rest.dto.UpdateSpaceRequest.class,
+                      example =
+                          """
+              {
+                "name": "Updated Research Space",
+                "publicRead": true,
+                "replaceLabels": {
+                  "category": "updated-research",
+                  "project": "ai-embedding-project"
+                }
+              }
+              """)),
+      responses = {
+          @OpenApiResponse(
+              status = "200",
+              description = "Successfully updated space",
+              content = @OpenApiContent(from = Space.class)),
+          @OpenApiResponse(
+              status = "400",
+              description = "Invalid request - ID format or update parameters invalid"),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to update this space"),
+          @OpenApiResponse(
+              status = "404",
+              description = "Not found - space with the specified ID does not exist")
+      })
   private void handleUpdateSpace(Context ctx) {
     String spaceIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST UpdateSpace request for ID: {} with API key: {}", spaceIdHex, apiKey);
 
+    // Create our DTO from the path parameter and request body
+    // First parse the body as our DTO class
+    com.goodmem.rest.dto.UpdateSpaceRequest requestDto = ctx.bodyAsClass(com.goodmem.rest.dto.UpdateSpaceRequest.class);
+    
+    // Validate label strategy (only one of replaceLabels or mergeLabels can be set)
+    try {
+      requestDto.validateLabelStrategy();
+    } catch (IllegalArgumentException e) {
+      setError(ctx, 400, e.getMessage());
+      return;
+    }
+    
+    // Validate and convert the spaceId
     StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
     if (spaceIdOr.isNotOk()) {
       setError(ctx, 400, "Invalid space ID format");
       return;
     }
-    UpdateSpaceRequest.Builder requestBuilder =
-        UpdateSpaceRequest.newBuilder().setSpaceId(spaceIdOr.getValue());
-
-    Map<String, Object> json = ctx.bodyAsClass(Map.class);
-
-    if (json.containsKey("name")) {
-      requestBuilder.setName((String) json.get("name"));
+    
+    // Build the gRPC request
+    SpaceOuterClass.UpdateSpaceRequest.Builder requestBuilder = 
+        SpaceOuterClass.UpdateSpaceRequest.newBuilder()
+            .setSpaceId(spaceIdOr.getValue());
+    
+    // Set the name if provided in the DTO
+    if (requestDto.name() != null) {
+      requestBuilder.setName(requestDto.name());
     }
-
-    if (json.containsKey("public_read")) {
-      requestBuilder.setPublicRead((Boolean) json.get("public_read"));
+    
+    // Set the public read flag if provided
+    if (requestDto.publicRead() != null) {
+      requestBuilder.setPublicRead(requestDto.publicRead());
     }
-
-    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> replaceLabels = (Map<String, String>) json.get("replace_labels");
+    
+    // Handle label update strategy
+    if (requestDto.replaceLabels() != null) {
       StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(replaceLabels);
+      labelsBuilder.putAllLabels(requestDto.replaceLabels());
       requestBuilder.setReplaceLabels(labelsBuilder.build());
-    }
-
-    if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> mergeLabels = (Map<String, String>) json.get("merge_labels");
+    } else if (requestDto.mergeLabels() != null) {
       StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(mergeLabels);
+      labelsBuilder.putAllLabels(requestDto.mergeLabels());
       requestBuilder.setMergeLabels(labelsBuilder.build());
     }
-
+    
+    // Call the gRPC service
     SpaceOuterClass.Space response = spaceService.updateSpace(requestBuilder.build());
-    ctx.json(RestMapper.toJsonMap(response));
+    
+    // Map the gRPC response to our DTO
+    Map<String, Object> responseMap = RestMapper.toJsonMap(response);
+    Space responseDto = new Space(
+        (String) responseMap.get("space_id"),
+        (String) responseMap.get("name"),
+        (Map<String, String>) responseMap.get("labels"),
+        (String) responseMap.get("embedder_id"),
+        (Long) responseMap.get("created_at"),
+        (Long) responseMap.get("updated_at"),
+        (String) responseMap.get("owner_id"),
+        (String) responseMap.get("created_by_id"),
+        (String) responseMap.get("updated_by_id"),
+        (Boolean) responseMap.get("public_read")
+    );
+    
+    // Return the DTO as JSON
+    ctx.json(responseDto);
   }
 
   /**
@@ -910,18 +989,63 @@ public class Main {
    *
    * @param ctx The Javalin context containing the request and response
    */
+  @OpenApi(
+      path = "/v1/spaces/{id}",
+      methods = { HttpMethod.DELETE },
+      summary = "Delete a space",
+      description = "Deletes a space and all of its associated memories. This operation cannot be undone. A 204 status code indicates successful deletion.",
+      operationId = "deleteSpace",
+      tags = "Spaces",
+      pathParams = {
+          @io.javalin.openapi.OpenApiParam(
+              name = "id",
+              description = "The unique identifier of the space to delete",
+              required = true,
+              type = String.class,
+              example = "550e8400-e29b-41d4-a716-446655440000")
+      },
+      responses = {
+          @OpenApiResponse(
+              status = "204",
+              description = "Space successfully deleted"),
+          @OpenApiResponse(
+              status = "400",
+              description = "Invalid request - space ID in invalid format"),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to delete this space"),
+          @OpenApiResponse(
+              status = "404",
+              description = "Not found - space with the specified ID does not exist")
+      })
   private void handleDeleteSpace(Context ctx) {
     String spaceIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST DeleteSpace request for ID: {} with API key: {}", spaceIdHex, apiKey);
 
-    StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(spaceIdHex);
+    // Create our DTO from the path parameter
+    com.goodmem.rest.dto.DeleteSpaceRequest requestDto = new com.goodmem.rest.dto.DeleteSpaceRequest(spaceIdHex);
+    
+    // Validate and convert the spaceId
+    StatusOr<ByteString> spaceIdOr = convertHexToUuidBytes(requestDto.spaceId());
     if (spaceIdOr.isNotOk()) {
       setError(ctx, 400, "Invalid space ID format");
       return;
     }
-    spaceService.deleteSpace(
-        DeleteSpaceRequest.newBuilder().setSpaceId(spaceIdOr.getValue()).build());
+    
+    // Build the gRPC request
+    SpaceOuterClass.DeleteSpaceRequest request = 
+        SpaceOuterClass.DeleteSpaceRequest.newBuilder()
+            .setSpaceId(spaceIdOr.getValue())
+            .build();
+    
+    // Call the gRPC service
+    spaceService.deleteSpace(request);
+    
+    // Return 204 No Content on successful deletion
     ctx.status(204);
   }
 
