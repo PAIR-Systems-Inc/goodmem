@@ -7,7 +7,14 @@ import com.goodmem.common.status.Status;
 import com.goodmem.common.status.StatusOr;
 import com.goodmem.config.MinioConfig;
 import com.goodmem.rest.dto.CreateSpaceRequest;
+import com.goodmem.rest.dto.DeleteSpaceRequest;
+import com.goodmem.rest.dto.GetSpaceRequest;
+import com.goodmem.rest.dto.ListSpacesRequest;
+import com.goodmem.rest.dto.ListSpacesResponse;
 import com.goodmem.rest.dto.Space;
+import com.goodmem.rest.dto.SystemInitRequest;
+import com.goodmem.rest.dto.SystemInitResponse;
+import com.goodmem.rest.dto.UpdateSpaceRequest;
 import com.goodmem.security.AuthInterceptor;
 import com.goodmem.security.ConditionalAuthInterceptor;
 import com.goodmem.util.EnumConverters;
@@ -47,8 +54,7 @@ import goodmem.v1.MemoryOuterClass.Memory;
 import goodmem.v1.MemoryServiceGrpc;
 import goodmem.v1.SpaceOuterClass;
 import goodmem.v1.SpaceServiceGrpc;
-import goodmem.v1.UserOuterClass.GetUserRequest;
-import goodmem.v1.UserOuterClass.User;
+import goodmem.v1.UserOuterClass;
 import goodmem.v1.UserServiceGrpc;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
@@ -90,6 +96,49 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.tinylog.Logger;
 
+/**
+ * Main server class for the GoodMem API.
+ * 
+ * <p>This class serves as the entry point and primary implementation of the GoodMem REST API.
+ * It initializes both gRPC and REST servers, configures routing, and implements all REST
+ * API endpoint handlers that bridge to the underlying gRPC service implementations.
+ * 
+ * <h2>Implementation Notes</h2>
+ * 
+ * <h3>Protocol Buffer Import Convention</h3>
+ * <p>When referring to Protocol Buffer generated classes, import the outer class and reference 
+ * inner classes with qualified names, rather than importing inner classes directly:
+ * <pre>
+ * // Preferred
+ * import goodmem.v1.UserOuterClass;
+ * // Then reference as UserOuterClass.GetUserRequest, UserOuterClass.User, etc.
+ * 
+ * // Avoid
+ * import goodmem.v1.UserOuterClass.GetUserRequest;
+ * import goodmem.v1.UserOuterClass.User;
+ * </pre>
+ * 
+ * <h3>REST-to-gRPC Bridge Pattern</h3>
+ * <p>Each REST endpoint handler follows a consistent pattern:
+ * <ol>
+ *   <li>Extract parameters from the request (path, query, header)</li>
+ *   <li>Parse and validate the request body using the appropriate DTO</li>
+ *   <li>Convert the DTO to a Protocol Buffer request message</li>
+ *   <li>Call the corresponding gRPC service method</li>
+ *   <li>Convert the Protocol Buffer response to a DTO</li>
+ *   <li>Return the DTO as JSON</li>
+ * </ol>
+ * 
+ * <h3>Error Handling</h3>
+ * <p>Error handling is consistent across all handlers:
+ * <ul>
+ *   <li>Validation errors return 400 Bad Request</li>
+ *   <li>Authentication errors return 401 Unauthorized</li>
+ *   <li>Permission errors return 403 Forbidden</li>
+ *   <li>Not found errors return 404 Not Found</li>
+ *   <li>Server errors return 500 Internal Server Error</li>
+ * </ul>
+ */
 public class Main {
 
   private static final int GRPC_PORT = 9090;
@@ -414,11 +463,11 @@ public class Main {
 //                                    get(this::handleGetUser);
 //                                  });
 //                            });
-//                        path(
-//                            "/v1/system/init",
-//                            () -> {
-//                              post(this::handleSystemInit);
-//                            });
+                        path(
+                            "/v1/system/init",
+                            () -> {
+                              post(this::handleSystemInit);
+                            });
 //
 //                        // Memory endpoints
 //                        path(
@@ -1061,8 +1110,8 @@ public class Main {
       return;
     }
 
-    User response =
-        userService.getUser(GetUserRequest.newBuilder().setUserId(userIdOr.getValue()).build());
+    UserOuterClass.User response =
+        userService.getUser(UserOuterClass.GetUserRequest.newBuilder().setUserId(userIdOr.getValue()).build());
     ctx.json(RestMapper.toJsonMap(response));
   }
 
@@ -1697,13 +1746,45 @@ public class Main {
 
   /**
    * Handles the system initialization endpoint. This special endpoint doesn't require
-   * authentication and is used to set up the initial admin user. If the root user already exists,
-   * it returns a message indicating the system is already initialized. If the root user doesn't
-   * exist, it creates the root user and an API key.
+   * authentication and is used to set up the initial admin user.
+   * 
+   * <p>If the root user already exists, it returns a message indicating that the system
+   * is already initialized. If the root user doesn't exist, it creates the root user
+   * and generates an API key for administrative access.
+   * 
+   * @param ctx The Javalin context containing the request and response
    */
+  @OpenApi(
+      path = "/v1/system/init",
+      methods = { HttpMethod.POST },
+      summary = "Initialize the system",
+      description = 
+          "Initializes the system by creating a root user and API key. This endpoint should only be called once during " +
+          "first-time setup. If the system is already initialized, the endpoint will return a success response without " +
+          "creating new credentials.",
+      operationId = "initializeSystem",
+      tags = "System",
+      requestBody =
+          @OpenApiRequestBody(
+              description = "Empty request body - no parameters required",
+              required = false,
+              content = @OpenApiContent(from = com.goodmem.rest.dto.SystemInitRequest.class)),
+      responses = {
+          @OpenApiResponse(
+              status = "200",
+              description = "System initialization successful",
+              content = @OpenApiContent(from = com.goodmem.rest.dto.SystemInitResponse.class)),
+          @OpenApiResponse(
+              status = "500", 
+              description = "Internal server error during initialization")
+      })
   private void handleSystemInit(Context ctx) {
     Logger.info("REST SystemInit request");
 
+    // Parse the empty request body
+    // This isn't strictly necessary since we don't need any parameters, but follows the pattern
+    ctx.bodyAsClass(com.goodmem.rest.dto.SystemInitRequest.class);
+    
     // Set up database connection from connection pool
     try (Connection connection = dataSource.getConnection()) {
 
@@ -1713,34 +1794,31 @@ public class Main {
 
       if (!result.isSuccess()) {
         Logger.error("System initialization failed: {}", result.errorMessage());
-        ctx.status(500).json(Map.of("error", result.errorMessage()));
+        setError(ctx, 500, result.errorMessage());
         return;
       }
 
+      // Create the appropriate response DTO based on the result
+      com.goodmem.rest.dto.SystemInitResponse responseDto;
+      
       if (result.alreadyInitialized()) {
         Logger.info("System is already initialized");
-        ctx.status(200)
-            .json(Map.of("initialized", true, "message", "System is already initialized"));
-        return;
+        responseDto = com.goodmem.rest.dto.SystemInitResponse.alreadyInitialized();
+      } else {
+        // System was just initialized
+        Logger.info("System initialized successfully");
+        responseDto = com.goodmem.rest.dto.SystemInitResponse.newlyInitialized(
+            result.apiKey(),
+            result.userId().toString()
+        );
       }
-
-      // Return the successful initialization with the API key
-      Logger.info("System initialized successfully");
-      ctx.status(200)
-          .json(
-              Map.of(
-                  "initialized",
-                  true,
-                  "message",
-                  "System initialized successfully",
-                  "root_api_key",
-                  result.apiKey(),
-                  "user_id",
-                  result.userId().toString()));
+      
+      // Return the response
+      ctx.status(200).json(responseDto);
 
     } catch (Exception e) {
       Logger.error(e, "Error during system initialization.");
-      ctx.status(500).json(Map.of("error", "Internal server error: " + e.getMessage()));
+      setError(ctx, 500, "Internal server error: " + e.getMessage());
     }
   }
 
