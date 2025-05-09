@@ -50,7 +50,7 @@ dependencies {
     
     // Database
     implementation("org.postgresql:postgresql:42.7.3")
-    implementation("com.zaxxer:HikariCP:5.1.0") // Connection pooling
+    implementation("com.zaxxer:HikariCP:6.3.0") // Connection pooling
     implementation("com.google.guava:guava:33.4.8-jre")
     
     // Testing
