@@ -10,7 +10,7 @@ version = "0.1.0"
 
 val javalinVersion = "6.6.0"
 val jacksonVersion = "2.18.3"
-val protobufVersion = "3.25.5"
+val protobufVersion = "4.30.2"
 val grpcVersion = "1.72.0"
 
 dependencies {
