@@ -31,7 +31,6 @@ var (
 
 	// Variables for listEmbeddersCmd
 	providerTypeFilter string
-	embedderNameFilter string
 )
 
 // embedderCmd represents the embedder command
