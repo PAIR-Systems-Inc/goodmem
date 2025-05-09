@@ -661,12 +661,23 @@ public class EmbedderServiceRestAdapter implements RestAdapter {
       }
     }
     
+    // Handle provider_type conversion safely with a default if missing
+    ProviderType providerType = ProviderType.OPENAI; // Default value
+    if (embedderMap.containsKey("provider_type") && embedderMap.get("provider_type") != null) {
+        try {
+            providerType = ProviderType.valueOf((String) embedderMap.get("provider_type"));
+        } catch (IllegalArgumentException e) {
+            // Fallback to default if enum value is invalid
+            Logger.warn("Invalid provider_type in response: {}", embedderMap.get("provider_type"));
+        }
+    }
+    
     // Create the response DTO
     return new EmbedderResponse(
         (String) embedderMap.get("embedder_id"),
         (String) embedderMap.get("display_name"),
         (String) embedderMap.get("description"),
-        ProviderType.valueOf((String) embedderMap.get("provider_type")),
+        providerType,
         (String) embedderMap.get("endpoint_url"),
         (String) embedderMap.get("api_path"),
         (String) embedderMap.get("model_identifier"),

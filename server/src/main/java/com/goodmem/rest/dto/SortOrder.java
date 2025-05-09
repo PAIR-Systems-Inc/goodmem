@@ -45,8 +45,8 @@ public enum SortOrder {
         }
         
         return switch (sortOrderStr.toUpperCase()) {
-            case "ASCENDING" -> ASCENDING;
-            case "DESCENDING" -> DESCENDING;
+            case "ASCENDING", "ASC" -> ASCENDING;
+            case "DESCENDING", "DESC" -> DESCENDING;
             default -> SORT_ORDER_UNSPECIFIED;
         };
     }
