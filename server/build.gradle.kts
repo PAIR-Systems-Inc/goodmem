@@ -9,7 +9,7 @@ group = "com.goodmem"
 version = "0.1.0"
 
 val javalinVersion = "6.6.0"
-val jacksonVersion = "2.18.3"
+val jacksonVersion = "2.19.0"
 val protobufVersion = "4.30.2"
 val grpcVersion = "1.72.0"
 
