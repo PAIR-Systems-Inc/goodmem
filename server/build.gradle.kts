@@ -54,7 +54,7 @@ dependencies {
     implementation("com.google.guava:guava:33.4.8-jre")
     
     // Testing
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.12.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.12.2")
     testImplementation("org.testcontainers:testcontainers:1.20.0")
     testImplementation("org.testcontainers:junit-jupiter:1.20.0")
