@@ -7,14 +7,7 @@ import com.goodmem.common.status.Status;
 import com.goodmem.common.status.StatusOr;
 import com.goodmem.config.MinioConfig;
 import com.goodmem.rest.dto.CreateSpaceRequest;
-import com.goodmem.rest.dto.DeleteSpaceRequest;
-import com.goodmem.rest.dto.GetSpaceRequest;
-import com.goodmem.rest.dto.ListSpacesRequest;
-import com.goodmem.rest.dto.ListSpacesResponse;
 import com.goodmem.rest.dto.Space;
-import com.goodmem.rest.dto.SystemInitRequest;
-import com.goodmem.rest.dto.SystemInitResponse;
-import com.goodmem.rest.dto.UpdateSpaceRequest;
 import com.goodmem.security.AuthInterceptor;
 import com.goodmem.security.ConditionalAuthInterceptor;
 import com.goodmem.util.EnumConverters;
@@ -426,15 +419,11 @@ public class Main {
 
                   config.registerPlugin(
                       new ReDocPlugin(
-                          reDocConfiguration -> {
-                            reDocConfiguration.setDocumentationPath("/openapi");
-                          }));
+                          reDocConfiguration -> reDocConfiguration.setDocumentationPath("/openapi")));
 
                   config.registerPlugin(
                       new SwaggerPlugin(
-                          swaggerConfiguration -> {
-                            swaggerConfiguration.setDocumentationPath("/openapi");
-                          }));
+                          swaggerConfiguration -> swaggerConfiguration.setDocumentationPath("/openapi")));
 
                   config.router.apiBuilder(
                       () -> {
@@ -491,19 +480,19 @@ public class Main {
 //                                  });
 //                            });
 //
-//                        // API Key endpoints
-//                        path(
-//                            "/v1/apikeys",
-//                            () -> {
-//                              post(this::handleCreateApiKey);
-//                              get(this::handleListApiKeys);
-//                              path(
-//                                  "{id}",
-//                                  () -> {
-//                                    put(this::handleUpdateApiKey);
-//                                    delete(this::handleDeleteApiKey);
-//                                  });
-//                            });
+                        // API Key endpoints
+                        path(
+                            "/v1/apikeys",
+                            () -> {
+                              post(this::handleCreateApiKey);
+                              get(this::handleListApiKeys);
+                              path(
+                                  "{id}",
+                                  () -> {
+                                    put(this::handleUpdateApiKey);
+                                    delete(this::handleDeleteApiKey);
+                                  });
+                            });
 //
 //                        // Embedder endpoints
 //                        path(
@@ -1229,90 +1218,261 @@ public class Main {
 
   // API Key handlers
   /**
-   * Handles a REST request to create a new API Key. Builds the create request from JSON and calls
-   * the gRPC service.
+   * Handles a REST request to create a new API Key. Builds the create request from the DTO
+   * and calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
+  @OpenApi(
+      path = "/v1/apikeys",
+      methods = { HttpMethod.POST },
+      summary = "Create a new API key",
+      description = "Creates a new API key for the authenticated user. The raw API key is returned only in this response and cannot be retrieved again.",
+      operationId = "createApiKey",
+      tags = "API Keys",
+      requestBody =
+          @OpenApiRequestBody(
+              description = "API key configuration details",
+              required = true,
+              content =
+                  @OpenApiContent(
+                      from = com.goodmem.rest.dto.CreateApiKeyRequest.class,
+                      example =
+                          """
+              {
+                "labels": {
+                  "environment": "production",
+                  "service": "recommendation-engine"
+                },
+                "expiresAt": 1714521600000
+              }
+              """)),
+      responses = {
+          @OpenApiResponse(
+              status = "200",
+              description = "Successfully created API key",
+              content = @OpenApiContent(from = com.goodmem.rest.dto.CreateApiKeyResponse.class)),
+          @OpenApiResponse(
+              status = "400",
+              description = "Invalid request - missing required fields or invalid format"),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to create API keys")
+      })
   private void handleCreateApiKey(Context ctx) {
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST CreateApiKey request with API key: {}", apiKey);
 
+    // Parse the request body into our DTO
+    com.goodmem.rest.dto.CreateApiKeyRequest requestDto = ctx.bodyAsClass(com.goodmem.rest.dto.CreateApiKeyRequest.class);
+    
+    // Convert the DTO to the gRPC request
     CreateApiKeyRequest.Builder requestBuilder = CreateApiKeyRequest.newBuilder();
-    Map<String, Object> json = ctx.bodyAsClass(Map.class);
-
-    // ApiKey uses direct map rather than StringMap wrapper
-    if (json.containsKey("labels") && json.get("labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> labels = (Map<String, String>) json.get("labels");
-      requestBuilder.putAllLabels(labels);
+    
+    // Add labels if provided
+    if (requestDto.labels() != null && !requestDto.labels().isEmpty()) {
+      requestBuilder.putAllLabels(requestDto.labels());
+    }
+    
+    // Add expiration timestamp if provided
+    if (requestDto.expiresAt() != null) {
+      // Convert from milliseconds to Timestamp
+      requestBuilder.setExpiresAt(
+          com.google.protobuf.Timestamp.newBuilder()
+              .setSeconds(requestDto.expiresAt() / 1000)
+              .setNanos((int) ((requestDto.expiresAt() % 1000) * 1000000))
+              .build());
     }
 
-    // Note: handling expires_at would require timestamp parsing which is omitted for brevity
-
+    // Call the gRPC service
     CreateApiKeyResponse response = apiKeyService.createApiKey(requestBuilder.build());
-    Map<String, Object> responseMap = new HashMap<>();
-    responseMap.put("apiKeyMetadata", RestMapper.toJsonMap(response.getApiKeyMetadata()));
-    responseMap.put("rawApiKey", response.getRawApiKey());
-    ctx.json(responseMap);
+    
+    // Convert the ApiKey metadata to our DTO
+    Map<String, Object> metadataMap = RestMapper.toJsonMap(response.getApiKeyMetadata());
+    com.goodmem.rest.dto.ApiKeyResponse apiKeyResponseDto = new com.goodmem.rest.dto.ApiKeyResponse(
+        (String) metadataMap.get("api_key_id"),
+        (String) metadataMap.get("user_id"),
+        (String) metadataMap.get("key_prefix"),
+        (String) metadataMap.get("status"),
+        (Map<String, String>) metadataMap.get("labels"),
+        metadataMap.containsKey("expires_at") ? (Long) metadataMap.get("expires_at") : null,
+        metadataMap.containsKey("last_used_at") ? (Long) metadataMap.get("last_used_at") : null,
+        (Long) metadataMap.get("created_at"),
+        (Long) metadataMap.get("updated_at"),
+        (String) metadataMap.get("created_by_id"),
+        (String) metadataMap.get("updated_by_id")
+    );
+    
+    // Create the response DTO
+    com.goodmem.rest.dto.CreateApiKeyResponse responseDto = 
+        new com.goodmem.rest.dto.CreateApiKeyResponse(apiKeyResponseDto, response.getRawApiKey());
+    
+    // Return the response
+    ctx.json(responseDto);
   }
 
   /**
    * Handles a REST request to list API Keys for the current user. Calls the gRPC service to get the
-   * list of keys.
+   * list of keys and converts them to DTOs.
    *
    * @param ctx The Javalin context containing the request and response
    */
+  @OpenApi(
+      path = "/v1/apikeys",
+      methods = { HttpMethod.GET },
+      summary = "List API keys",
+      description = "Retrieves a list of API keys belonging to the authenticated user. The list includes metadata about each key but not the actual key values.",
+      operationId = "listApiKeys",
+      tags = "API Keys",
+      responses = {
+          @OpenApiResponse(
+              status = "200",
+              description = "Successfully retrieved API keys",
+              content = @OpenApiContent(from = com.goodmem.rest.dto.ListApiKeysResponse.class)),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to list API keys")
+      })
   private void handleListApiKeys(Context ctx) {
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST ListApiKeys request with API key: {}", apiKey);
 
+    // Create and execute the gRPC request (note: currently no parameters)
     ListApiKeysRequest request = ListApiKeysRequest.newBuilder().build();
-
     ListApiKeysResponse response = apiKeyService.listApiKeys(request);
-    ctx.json(Map.of("keys", response.getKeysList().stream().map(RestMapper::toJsonMap).toList()));
+    
+    // Convert each ApiKey to our DTO format
+    List<com.goodmem.rest.dto.ApiKeyResponse> apiKeys = response.getKeysList().stream()
+        .map(key -> {
+          Map<String, Object> keyMap = RestMapper.toJsonMap(key);
+          return new com.goodmem.rest.dto.ApiKeyResponse(
+              (String) keyMap.get("api_key_id"),
+              (String) keyMap.get("user_id"),
+              (String) keyMap.get("key_prefix"),
+              (String) keyMap.get("status"),
+              (Map<String, String>) keyMap.get("labels"),
+              keyMap.containsKey("expires_at") ? (Long) keyMap.get("expires_at") : null,
+              keyMap.containsKey("last_used_at") ? (Long) keyMap.get("last_used_at") : null,
+              (Long) keyMap.get("created_at"),
+              (Long) keyMap.get("updated_at"),
+              (String) keyMap.get("created_by_id"),
+              (String) keyMap.get("updated_by_id")
+          );
+        })
+        .toList();
+    
+    // Create the response DTO
+    com.goodmem.rest.dto.ListApiKeysResponse responseDto = 
+        new com.goodmem.rest.dto.ListApiKeysResponse(apiKeys);
+    
+    // Return the response
+    ctx.json(responseDto);
   }
 
   /**
    * Handles a REST request to update an API Key by ID. Converts the hex UUID to binary format,
-   * builds the update request from JSON, and calls the gRPC service.
+   * builds the update request from the DTO, and calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
+  @OpenApi(
+      path = "/v1/apikeys/{id}",
+      methods = { HttpMethod.PUT },
+      summary = "Update an API key",
+      description = "Updates an existing API key with new values for status or labels.",
+      operationId = "updateApiKey",
+      tags = "API Keys",
+      pathParams = {
+          @io.javalin.openapi.OpenApiParam(
+              name = "id",
+              description = "The unique identifier of the API key to update",
+              required = true,
+              type = String.class,
+              example = "550e8400-e29b-41d4-a716-446655440000")
+      },
+      requestBody =
+          @OpenApiRequestBody(
+              description = "API key update details",
+              required = true,
+              content =
+                  @OpenApiContent(
+                      from = com.goodmem.rest.dto.UpdateApiKeyRequest.class,
+                      example =
+                          """
+              {
+                "status": "ACTIVE",
+                "replaceLabels": {
+                  "environment": "production",
+                  "service": "recommendation-engine"
+                }
+              }
+              """)),
+      responses = {
+          @OpenApiResponse(
+              status = "200",
+              description = "Successfully updated API key",
+              content = @OpenApiContent(from = com.goodmem.rest.dto.ApiKeyResponse.class)),
+          @OpenApiResponse(
+              status = "400",
+              description = "Invalid request - ID format or update parameters invalid"),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to update this API key"),
+          @OpenApiResponse(
+              status = "404",
+              description = "Not found - API key with the specified ID does not exist")
+      })
   private void handleUpdateApiKey(Context ctx) {
     String apiKeyIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST UpdateApiKey request for ID: {} with API key: {}", apiKeyIdHex, apiKey);
 
+    // Parse the request body into our DTO
+    com.goodmem.rest.dto.UpdateApiKeyRequest requestDto = ctx.bodyAsClass(com.goodmem.rest.dto.UpdateApiKeyRequest.class);
+    
+    // Validate label strategy (only one of replaceLabels or mergeLabels can be set)
+    try {
+      requestDto.validateLabelStrategy();
+    } catch (IllegalArgumentException e) {
+      setError(ctx, 400, e.getMessage());
+      return;
+    }
+    
+    // Validate and convert the API key ID
     StatusOr<ByteString> apiKeyIdOr = convertHexToUuidBytes(apiKeyIdHex);
     if (apiKeyIdOr.isNotOk()) {
       setError(ctx, 400, "Invalid API key ID format");
       return;
     }
+    
+    // Build the gRPC request
     UpdateApiKeyRequest.Builder requestBuilder =
         UpdateApiKeyRequest.newBuilder().setApiKeyId(apiKeyIdOr.getValue());
 
-    Map<String, Object> json = ctx.bodyAsClass(Map.class);
-
     // Handle label update strategies using StringMap
-    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> labels = (Map<String, String>) json.get("replace_labels");
-      goodmem.v1.Common.StringMap stringMap =
-          goodmem.v1.Common.StringMap.newBuilder().putAllLabels(labels).build();
-      requestBuilder.setReplaceLabels(stringMap);
-    } else if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> labels = (Map<String, String>) json.get("merge_labels");
-      goodmem.v1.Common.StringMap stringMap =
-          goodmem.v1.Common.StringMap.newBuilder().putAllLabels(labels).build();
-      requestBuilder.setMergeLabels(stringMap);
+    if (requestDto.replaceLabels() != null) {
+      goodmem.v1.Common.StringMap.Builder labelsBuilder = goodmem.v1.Common.StringMap.newBuilder();
+      labelsBuilder.putAllLabels(requestDto.replaceLabels());
+      requestBuilder.setReplaceLabels(labelsBuilder.build());
+    } else if (requestDto.mergeLabels() != null) {
+      goodmem.v1.Common.StringMap.Builder labelsBuilder = goodmem.v1.Common.StringMap.newBuilder();
+      labelsBuilder.putAllLabels(requestDto.mergeLabels());
+      requestBuilder.setMergeLabels(labelsBuilder.build());
     }
 
-    if (json.containsKey("status")) {
-      String statusStr = (String) json.get("status");
+    // Set the status if provided
+    if (requestDto.status() != null) {
       Apikey.Status status =
-          switch (statusStr.toUpperCase()) {
+          switch (requestDto.status().toUpperCase()) {
             case "ACTIVE" -> Apikey.Status.ACTIVE;
             case "INACTIVE" -> Apikey.Status.INACTIVE;
             default -> Apikey.Status.STATUS_UNSPECIFIED;
@@ -1320,8 +1480,27 @@ public class Main {
       requestBuilder.setStatus(status);
     }
 
+    // Call the gRPC service
     ApiKey response = apiKeyService.updateApiKey(requestBuilder.build());
-    ctx.json(RestMapper.toJsonMap(response));
+    
+    // Convert the response to our DTO
+    Map<String, Object> responseMap = RestMapper.toJsonMap(response);
+    com.goodmem.rest.dto.ApiKeyResponse responseDto = new com.goodmem.rest.dto.ApiKeyResponse(
+        (String) responseMap.get("api_key_id"),
+        (String) responseMap.get("user_id"),
+        (String) responseMap.get("key_prefix"),
+        (String) responseMap.get("status"),
+        (Map<String, String>) responseMap.get("labels"),
+        responseMap.containsKey("expires_at") ? (Long) responseMap.get("expires_at") : null,
+        responseMap.containsKey("last_used_at") ? (Long) responseMap.get("last_used_at") : null,
+        (Long) responseMap.get("created_at"),
+        (Long) responseMap.get("updated_at"),
+        (String) responseMap.get("created_by_id"),
+        (String) responseMap.get("updated_by_id")
+    );
+    
+    // Return the response
+    ctx.json(responseDto);
   }
 
   /**
@@ -1330,18 +1509,62 @@ public class Main {
    *
    * @param ctx The Javalin context containing the request and response
    */
+  @OpenApi(
+      path = "/v1/apikeys/{id}",
+      methods = { HttpMethod.DELETE },
+      summary = "Delete an API key",
+      description = "Deletes (revokes) an API key. This operation cannot be undone.",
+      operationId = "deleteApiKey",
+      tags = "API Keys",
+      pathParams = {
+          @io.javalin.openapi.OpenApiParam(
+              name = "id",
+              description = "The unique identifier of the API key to delete",
+              required = true,
+              type = String.class,
+              example = "550e8400-e29b-41d4-a716-446655440000")
+      },
+      responses = {
+          @OpenApiResponse(
+              status = "204",
+              description = "API key successfully deleted"),
+          @OpenApiResponse(
+              status = "400",
+              description = "Invalid request - API key ID in invalid format"),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to delete this API key"),
+          @OpenApiResponse(
+              status = "404",
+              description = "Not found - API key with the specified ID does not exist")
+      })
   private void handleDeleteApiKey(Context ctx) {
     String apiKeyIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST DeleteApiKey request for ID: {} with API key: {}", apiKeyIdHex, apiKey);
 
-    StatusOr<ByteString> apiKeyIdOr = convertHexToUuidBytes(apiKeyIdHex);
+    // Create our DTO from the path parameter
+    com.goodmem.rest.dto.DeleteApiKeyRequest requestDto = new com.goodmem.rest.dto.DeleteApiKeyRequest(apiKeyIdHex);
+    
+    // Validate and convert the API key ID
+    StatusOr<ByteString> apiKeyIdOr = convertHexToUuidBytes(requestDto.apiKeyId());
     if (apiKeyIdOr.isNotOk()) {
       setError(ctx, 400, "Invalid API key ID format");
       return;
     }
-    apiKeyService.deleteApiKey(
-        DeleteApiKeyRequest.newBuilder().setApiKeyId(apiKeyIdOr.getValue()).build());
+    
+    // Build the gRPC request
+    DeleteApiKeyRequest request = DeleteApiKeyRequest.newBuilder()
+        .setApiKeyId(apiKeyIdOr.getValue())
+        .build();
+    
+    // Call the gRPC service
+    apiKeyService.deleteApiKey(request);
+    
+    // Return 204 No Content on successful deletion
     ctx.status(204);
   }
 
@@ -1646,7 +1869,7 @@ public class Main {
     return map;
   }
 
-  private Map<String, Object> protoToMap(User user) {
+  private Map<String, Object> protoToMap(UserOuterClass.User user) {
     Map<String, Object> map = new HashMap<>();
     map.put("user_id", Uuids.bytesToHex(user.getUserId().toByteArray()));
     map.put("email", user.getEmail());
@@ -1803,7 +2026,7 @@ public class Main {
       
       if (result.alreadyInitialized()) {
         Logger.info("System is already initialized");
-        responseDto = com.goodmem.rest.dto.SystemInitResponse.alreadyInitialized();
+        responseDto = com.goodmem.rest.dto.SystemInitResponse.alreadyInitializedResponse();
       } else {
         // System was just initialized
         Logger.info("System initialized successfully");

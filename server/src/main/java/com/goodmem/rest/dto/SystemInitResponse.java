@@ -46,7 +46,7 @@ public record SystemInitResponse(
      * 
      * @return A SystemInitResponse with alreadyInitialized=true and appropriate message
      */
-    public static SystemInitResponse alreadyInitialized() {
+    public static SystemInitResponse alreadyInitializedResponse() {
         return new SystemInitResponse(
             true,
             "System is already initialized",
