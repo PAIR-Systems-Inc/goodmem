@@ -442,43 +442,43 @@ public class Main {
                                   });
                             });
 
-//                        // User endpoints
-//                        path(
-//                            "/v1/users",
-//                            () -> {
-//                              path(
-//                                  "{id}",
-//                                  () -> {
-//                                    get(this::handleGetUser);
-//                                  });
-//                            });
+                        // User endpoints
+                        path(
+                            "/v1/users",
+                            () -> {
+                              path(
+                                  "{id}",
+                                  () -> {
+                                    get(this::handleGetUser);
+                                  });
+                            });
                         path(
                             "/v1/system/init",
                             () -> {
                               post(this::handleSystemInit);
                             });
-//
-//                        // Memory endpoints
-//                        path(
-//                            "/v1/memories",
-//                            () -> {
-//                              post(this::handleCreateMemory);
-//                              path(
-//                                  "{id}",
-//                                  () -> {
-//                                    get(this::handleGetMemory);
-//                                    delete(this::handleDeleteMemory);
-//                                  });
-//                            });
-//                        path(
-//                            "/v1/spaces",
-//                            () -> {
-//                              path(
-//                                  "{spaceId}/memories",
-//                                  () -> {
-//                                    get(this::handleListMemories);
-//                                  });
-//                            });
+                        // TODO: Upgrade memory endpoints with proper DTOs and OpenAPI annotations before uncommenting
+                        // All handler methods are implemented but need DTO/OpenAPI enhancement
+                        // path(
+                        //     "/v1/memories",
+                        //     () -> {
+                        //       post(this::handleCreateMemory);
+                        //       path(
+                        //           "{id}",
+                        //           () -> {
+                        //             get(this::handleGetMemory);
+                        //             delete(this::handleDeleteMemory);
+                        //           });
+                        //     });
+                        // path(
+                        //     "/v1/spaces",
+                        //     () -> {
+                        //       path(
+                        //           "{spaceId}/memories",
+                        //           () -> {
+                        //             get(this::handleListMemories);
+                        //           });
+                        //     });
 //
                         // API Key endpoints
                         path(
@@ -1087,20 +1087,96 @@ public class Main {
   }
 
   // User handlers
+  
+  /**
+   * Handles a REST request to retrieve a User by ID. Converts the hex UUID to binary format and
+   * calls the gRPC service to fetch the user details.
+   *
+   * @param ctx The Javalin context containing the request and response
+   */
+  @OpenApi(
+      path = "/v1/users/{id}",
+      methods = { HttpMethod.GET },
+      summary = "Get a user by ID",
+      description = "Retrieves a specific user by their unique identifier. Returns the user's information including email, display name, and creation time.",
+      operationId = "getUser",
+      tags = "Users",
+      pathParams = {
+          @io.javalin.openapi.OpenApiParam(
+              name = "id",
+              description = "The unique identifier of the user to retrieve",
+              required = true,
+              type = String.class,
+              example = "550e8400-e29b-41d4-a716-446655440000")
+      },
+      queryParams = {
+          @io.javalin.openapi.OpenApiParam(
+              name = "email",
+              description = "Alternative lookup by email address (if ID is not specified)",
+              required = false,
+              type = String.class,
+              example = "user@example.com")
+      },
+      responses = {
+          @OpenApiResponse(
+              status = "200",
+              description = "Successfully retrieved user",
+              content = @OpenApiContent(from = com.goodmem.rest.dto.UserResponse.class)),
+          @OpenApiResponse(
+              status = "400",
+              description = "Invalid request - user ID in invalid format"),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to view this user's information"),
+          @OpenApiResponse(
+              status = "404",
+              description = "Not found - user with the specified ID does not exist")
+      })
   private void handleGetUser(Context ctx) {
     String userIdHex = ctx.pathParam("id");
+    String email = ctx.queryParam("email");
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST GetUser request for ID: {} with API key: {}", userIdHex, apiKey);
 
-    StatusOr<ByteString> userIdOr = convertHexToUuidBytes(userIdHex);
-    if (userIdOr.isNotOk()) {
-      setError(ctx, 400, "Invalid user ID format");
-      return;
+    // Create the DTO from the path parameter and query parameter
+    com.goodmem.rest.dto.GetUserRequest requestDto = new com.goodmem.rest.dto.GetUserRequest(userIdHex, email);
+    
+    // Build the gRPC request builder
+    UserOuterClass.GetUserRequest.Builder requestBuilder = UserOuterClass.GetUserRequest.newBuilder();
+    
+    // Set the user ID if provided
+    if (!Strings.isNullOrEmpty(requestDto.userId())) {
+      StatusOr<ByteString> userIdOr = convertHexToUuidBytes(requestDto.userId());
+      if (userIdOr.isNotOk()) {
+        setError(ctx, 400, "Invalid user ID format");
+        return;
+      }
+      requestBuilder.setUserId(userIdOr.getValue());
     }
-
-    UserOuterClass.User response =
-        userService.getUser(UserOuterClass.GetUserRequest.newBuilder().setUserId(userIdOr.getValue()).build());
-    ctx.json(RestMapper.toJsonMap(response));
+    
+    // Set the email if provided
+    if (!Strings.isNullOrEmpty(requestDto.email())) {
+      requestBuilder.setEmail(requestDto.email());
+    }
+    
+    // Call the gRPC service
+    UserOuterClass.User response = userService.getUser(requestBuilder.build());
+    
+    // Map the gRPC response to our DTO
+    Map<String, Object> responseMap = RestMapper.toJsonMap(response);
+    com.goodmem.rest.dto.UserResponse responseDto = new com.goodmem.rest.dto.UserResponse(
+        (String) responseMap.get("user_id"),
+        (String) responseMap.get("email"),
+        (String) responseMap.get("display_name"),
+        (String) responseMap.get("username"),
+        (Long) responseMap.get("created_at"),
+        (Long) responseMap.get("updated_at")
+    );
+    
+    ctx.json(responseDto);
   }
 
   // Memory handlers
