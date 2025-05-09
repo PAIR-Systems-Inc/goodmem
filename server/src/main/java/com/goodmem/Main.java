@@ -493,21 +493,20 @@ public class Main {
                                     delete(this::handleDeleteApiKey);
                                   });
                             });
-//
-//                        // Embedder endpoints
-//                        path(
-//                            "/v1/embedders",
-//                            () -> {
-//                              post(this::handleCreateEmbedder);
-//                              get(this::handleListEmbedders);
-//                              path(
-//                                  "{id}",
-//                                  () -> {
-//                                    get(this::handleGetEmbedder);
-//                                    put(this::handleUpdateEmbedder);
-//                                    delete(this::handleDeleteEmbedder);
-//                                  });
-//                            });
+                        // Embedder endpoints
+                        path(
+                            "/v1/embedders",
+                            () -> {
+                              post(this::handleCreateEmbedder);
+                              get(this::handleListEmbedders);
+                              path(
+                                  "{id}",
+                                  () -> {
+                                    get(this::handleGetEmbedder);
+                                    put(this::handleUpdateEmbedder);
+                                    delete(this::handleDeleteEmbedder);
+                                  });
+                            });
                       });
                 })
             .start(REST_PORT);
@@ -1571,97 +1570,191 @@ public class Main {
   // Embedder handlers
 
   /**
-   * Handles a REST request to create a new Embedder. Builds the create request from JSON and calls
+   * Handles a REST request to create a new Embedder. Converts the DTO from JSON and calls
    * the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
+  @OpenApi(
+      path = "/v1/embedders",
+      methods = { HttpMethod.POST },
+      summary = "Create a new embedder",
+      description = 
+          "Creates a new embedder configuration for vectorizing content. Embedders represent connections " +
+          "to different embedding API services (like OpenAI, vLLM, etc.) and include all the necessary " +
+          "configuration to use them with memory spaces.",
+      operationId = "createEmbedder",
+      tags = "Embedders",
+      requestBody =
+          @OpenApiRequestBody(
+              description = "Embedder configuration details",
+              required = true,
+              content =
+                  @OpenApiContent(
+                      from = com.goodmem.rest.dto.CreateEmbedderRequest.class,
+                      example =
+                          """
+              {
+                "displayName": "OpenAI Embedding Model",
+                "description": "OpenAI text embedding model with 1536 dimensions",
+                "providerType": "OPENAI",
+                "endpointUrl": "https://api.openai.com",
+                "apiPath": "/v1/embeddings",
+                "modelIdentifier": "text-embedding-3-small",
+                "dimensionality": 1536,
+                "maxSequenceLength": 8192,
+                "supportedModalities": ["TEXT"],
+                "credentials": "sk-1234567890abcdef",
+                "labels": {
+                  "environment": "production",
+                  "team": "research"
+                },
+                "version": "1.0"
+              }
+              """)),
+      responses = {
+          @OpenApiResponse(
+              status = "200",
+              description = "Successfully created embedder",
+              content = @OpenApiContent(from = com.goodmem.rest.dto.EmbedderResponse.class)),
+          @OpenApiResponse(
+              status = "400",
+              description = "Invalid request - missing required fields or invalid format"),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to create embedders"),
+          @OpenApiResponse(
+              status = "409",
+              description = "Conflict - an embedder with the same connection details already exists")
+      })
   private void handleCreateEmbedder(Context ctx) {
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST CreateEmbedder request with API key: {}", apiKey);
 
+    // Parse the JSON body into our DTO
+    com.goodmem.rest.dto.CreateEmbedderRequest requestDto = ctx.bodyAsClass(com.goodmem.rest.dto.CreateEmbedderRequest.class);
+    
+    // Validate the DTO
+    try {
+      requestDto.validate();
+    } catch (IllegalArgumentException e) {
+      setError(ctx, 400, e.getMessage());
+      return;
+    }
+    
+    // Build the gRPC request from the DTO
     CreateEmbedderRequest.Builder requestBuilder = CreateEmbedderRequest.newBuilder();
-    Map<String, Object> json = ctx.bodyAsClass(Map.class);
-
-    if (json.containsKey("display_name")) {
-      requestBuilder.setDisplayName((String) json.get("display_name"));
+    
+    // Set the required fields
+    requestBuilder.setDisplayName(requestDto.displayName());
+    
+    if (requestDto.providerType() != null) {
+      requestBuilder.setProviderType(requestDto.providerType().toProtoProviderType());
     }
-
-    if (json.containsKey("description")) {
-      requestBuilder.setDescription((String) json.get("description"));
+    
+    requestBuilder.setEndpointUrl(requestDto.endpointUrl());
+    requestBuilder.setModelIdentifier(requestDto.modelIdentifier());
+    requestBuilder.setDimensionality(requestDto.dimensionality());
+    requestBuilder.setCredentials(requestDto.credentials());
+    
+    // Set the optional fields if provided
+    if (requestDto.description() != null) {
+      requestBuilder.setDescription(requestDto.description());
     }
-
-    if (json.containsKey("provider_type")) {
-      String providerTypeStr = (String) json.get("provider_type");
-      goodmem.v1.EmbedderOuterClass.ProviderType providerType =
-          EnumConverters.providerTypeFromString(providerTypeStr);
-      requestBuilder.setProviderType(providerType);
+    
+    if (requestDto.apiPath() != null) {
+      requestBuilder.setApiPath(requestDto.apiPath());
     }
-
-    if (json.containsKey("endpoint_url")) {
-      requestBuilder.setEndpointUrl((String) json.get("endpoint_url"));
+    
+    if (requestDto.maxSequenceLength() != null) {
+      requestBuilder.setMaxSequenceLength(requestDto.maxSequenceLength());
     }
-
-    if (json.containsKey("api_path")) {
-      requestBuilder.setApiPath((String) json.get("api_path"));
-    }
-
-    if (json.containsKey("model_identifier")) {
-      requestBuilder.setModelIdentifier((String) json.get("model_identifier"));
-    }
-
-    if (json.containsKey("dimensionality")) {
-      if (json.get("dimensionality") instanceof Number) {
-        requestBuilder.setDimensionality(((Number) json.get("dimensionality")).intValue());
+    
+    if (requestDto.supportedModalities() != null && !requestDto.supportedModalities().isEmpty()) {
+      for (com.goodmem.rest.dto.Modality modality : requestDto.supportedModalities()) {
+        requestBuilder.addSupportedModalities(modality.toProtoModality());
       }
     }
-
-    if (json.containsKey("max_sequence_length")) {
-      if (json.get("max_sequence_length") instanceof Number) {
-        requestBuilder.setMaxSequenceLength(((Number) json.get("max_sequence_length")).intValue());
-      }
+    
+    if (requestDto.labels() != null && !requestDto.labels().isEmpty()) {
+      requestBuilder.putAllLabels(requestDto.labels());
     }
-
-    if (json.containsKey("supported_modalities")
-        && json.get("supported_modalities") instanceof Iterable) {
-      @SuppressWarnings("unchecked")
-      Iterable<String> modalityStrings = (Iterable<String>) json.get("supported_modalities");
-      for (String modalityStr : modalityStrings) {
-        goodmem.v1.EmbedderOuterClass.Modality modality =
-            EnumConverters.modalityFromString(modalityStr);
-        if (modality != goodmem.v1.EmbedderOuterClass.Modality.MODALITY_UNSPECIFIED) {
-          requestBuilder.addSupportedModalities(modality);
-        }
-      }
+    
+    if (requestDto.version() != null) {
+      requestBuilder.setVersion(requestDto.version());
     }
-
-    if (json.containsKey("credentials")) {
-      requestBuilder.setCredentials((String) json.get("credentials"));
+    
+    if (requestDto.monitoringEndpoint() != null) {
+      requestBuilder.setMonitoringEndpoint(requestDto.monitoringEndpoint());
     }
-
-    if (json.containsKey("labels") && json.get("labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> labels = (Map<String, String>) json.get("labels");
-      requestBuilder.putAllLabels(labels);
-    }
-
-    if (json.containsKey("version")) {
-      requestBuilder.setVersion((String) json.get("version"));
-    }
-
-    if (json.containsKey("monitoring_endpoint")) {
-      requestBuilder.setMonitoringEndpoint((String) json.get("monitoring_endpoint"));
-    }
-
-    if (json.containsKey("owner_id")) {
-      StatusOr<ByteString> ownerIdOr = convertHexToUuidBytes((String) json.get("owner_id"));
+    
+    if (requestDto.ownerId() != null) {
+      StatusOr<ByteString> ownerIdOr = convertHexToUuidBytes(requestDto.ownerId());
       if (ownerIdOr.isOk()) {
         requestBuilder.setOwnerId(ownerIdOr.getValue());
+      } else {
+        Logger.warn("Invalid owner ID format: {}", requestDto.ownerId());
+        setError(ctx, 400, "Invalid owner ID format");
+        return;
       }
     }
-
-    Embedder response = embedderService.createEmbedder(requestBuilder.build());
-    ctx.json(RestMapper.toJsonMap(response));
+    
+    try {
+      // Call the gRPC service
+      Embedder response = embedderService.createEmbedder(requestBuilder.build());
+      
+      // Convert the response to our DTO
+      Map<String, Object> responseMap = RestMapper.toJsonMap(response);
+      
+      List<com.goodmem.rest.dto.Modality> modalityList = null;
+      if (responseMap.containsKey("supported_modalities") && responseMap.get("supported_modalities") instanceof List) {
+        @SuppressWarnings("unchecked")
+        List<String> modalityStrings = (List<String>) responseMap.get("supported_modalities");
+        modalityList = modalityStrings.stream()
+            .map(com.goodmem.rest.dto.Modality::fromString)
+            .filter(modality -> modality != null)
+            .toList();
+      }
+      
+      com.goodmem.rest.dto.EmbedderResponse responseDto = new com.goodmem.rest.dto.EmbedderResponse(
+          (String) responseMap.get("embedder_id"),
+          (String) responseMap.get("display_name"),
+          (String) responseMap.get("description"),
+          com.goodmem.rest.dto.ProviderType.fromString((String) responseMap.get("provider_type")),
+          (String) responseMap.get("endpoint_url"),
+          (String) responseMap.get("api_path"),
+          (String) responseMap.get("model_identifier"),
+          responseMap.get("dimensionality") instanceof Number ? ((Number) responseMap.get("dimensionality")).intValue() : null,
+          responseMap.get("max_sequence_length") instanceof Number ? ((Number) responseMap.get("max_sequence_length")).intValue() : null,
+          modalityList,
+          (Map<String, String>) responseMap.get("labels"),
+          (String) responseMap.get("version"),
+          (String) responseMap.get("monitoring_endpoint"),
+          (String) responseMap.get("owner_id"),
+          (Long) responseMap.get("created_at"),
+          (Long) responseMap.get("updated_at"),
+          (String) responseMap.get("created_by_id"),
+          (String) responseMap.get("updated_by_id")
+      );
+      
+      ctx.json(responseDto);
+    } catch (io.grpc.StatusRuntimeException e) {
+      if (e.getStatus().getCode() == io.grpc.Status.Code.ALREADY_EXISTS) {
+        setError(ctx, 409, "An embedder with these connection details already exists");
+      } else if (e.getStatus().getCode() == io.grpc.Status.Code.PERMISSION_DENIED) {
+        setError(ctx, 403, "Permission denied");
+      } else if (e.getStatus().getCode() == io.grpc.Status.Code.UNAUTHENTICATED) {
+        setError(ctx, 401, "Authentication required");
+      } else if (e.getStatus().getCode() == io.grpc.Status.Code.INVALID_ARGUMENT) {
+        setError(ctx, 400, e.getStatus().getDescription());
+      } else {
+        Logger.error(e, "Error creating embedder: {}", e.getMessage());
+        setError(ctx, 500, "Internal server error");
+      }
+    }
   }
 
   /**
@@ -1670,21 +1763,109 @@ public class Main {
    *
    * @param ctx The Javalin context containing the request and response
    */
+  @OpenApi(
+      path = "/v1/embedders/{id}",
+      methods = { HttpMethod.GET },
+      summary = "Get an embedder by ID",
+      description = "Retrieves a specific embedder by its unique identifier. Returns the complete embedder configuration information.",
+      operationId = "getEmbedder",
+      tags = "Embedders",
+      pathParams = {
+          @io.javalin.openapi.OpenApiParam(
+              name = "id",
+              description = "The unique identifier of the embedder to retrieve",
+              required = true,
+              type = String.class,
+              example = "550e8400-e29b-41d4-a716-446655440000")
+      },
+      responses = {
+          @OpenApiResponse(
+              status = "200",
+              description = "Successfully retrieved embedder",
+              content = @OpenApiContent(from = com.goodmem.rest.dto.EmbedderResponse.class)),
+          @OpenApiResponse(
+              status = "400",
+              description = "Invalid request - embedder ID in invalid format"),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to view this embedder"),
+          @OpenApiResponse(
+              status = "404",
+              description = "Not found - embedder with the specified ID does not exist")
+      })
   private void handleGetEmbedder(Context ctx) {
     String embedderIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST GetEmbedder request for ID: {} with API key: {}", embedderIdHex, apiKey);
 
-    StatusOr<ByteString> embedderIdOr = convertHexToUuidBytes(embedderIdHex);
+    // Create the DTO from the path parameter
+    com.goodmem.rest.dto.GetEmbedderRequest requestDto = new com.goodmem.rest.dto.GetEmbedderRequest(embedderIdHex);
+    
+    // Validate and convert the embedder ID
+    StatusOr<ByteString> embedderIdOr = convertHexToUuidBytes(requestDto.embedderId());
     if (embedderIdOr.isNotOk()) {
       setError(ctx, 400, "Invalid embedder ID format");
       return;
     }
-
-    Embedder response =
-        embedderService.getEmbedder(
-            GetEmbedderRequest.newBuilder().setEmbedderId(embedderIdOr.getValue()).build());
-    ctx.json(RestMapper.toJsonMap(response));
+    
+    try {
+      // Create and execute the gRPC request
+      GetEmbedderRequest request = GetEmbedderRequest.newBuilder()
+          .setEmbedderId(embedderIdOr.getValue())
+          .build();
+      
+      Embedder response = embedderService.getEmbedder(request);
+      
+      // Convert the response to our DTO
+      Map<String, Object> responseMap = RestMapper.toJsonMap(response);
+      
+      List<com.goodmem.rest.dto.Modality> modalityList = null;
+      if (responseMap.containsKey("supported_modalities") && responseMap.get("supported_modalities") instanceof List) {
+        @SuppressWarnings("unchecked")
+        List<String> modalityStrings = (List<String>) responseMap.get("supported_modalities");
+        modalityList = modalityStrings.stream()
+            .map(com.goodmem.rest.dto.Modality::fromString)
+            .filter(modality -> modality != null)
+            .toList();
+      }
+      
+      com.goodmem.rest.dto.EmbedderResponse responseDto = new com.goodmem.rest.dto.EmbedderResponse(
+          (String) responseMap.get("embedder_id"),
+          (String) responseMap.get("display_name"),
+          (String) responseMap.get("description"),
+          com.goodmem.rest.dto.ProviderType.fromString((String) responseMap.get("provider_type")),
+          (String) responseMap.get("endpoint_url"),
+          (String) responseMap.get("api_path"),
+          (String) responseMap.get("model_identifier"),
+          responseMap.get("dimensionality") instanceof Number ? ((Number) responseMap.get("dimensionality")).intValue() : null,
+          responseMap.get("max_sequence_length") instanceof Number ? ((Number) responseMap.get("max_sequence_length")).intValue() : null,
+          modalityList,
+          (Map<String, String>) responseMap.get("labels"),
+          (String) responseMap.get("version"),
+          (String) responseMap.get("monitoring_endpoint"),
+          (String) responseMap.get("owner_id"),
+          (Long) responseMap.get("created_at"),
+          (Long) responseMap.get("updated_at"),
+          (String) responseMap.get("created_by_id"),
+          (String) responseMap.get("updated_by_id")
+      );
+      
+      ctx.json(responseDto);
+    } catch (io.grpc.StatusRuntimeException e) {
+      if (e.getStatus().getCode() == io.grpc.Status.Code.NOT_FOUND) {
+        setError(ctx, 404, "Embedder not found");
+      } else if (e.getStatus().getCode() == io.grpc.Status.Code.PERMISSION_DENIED) {
+        setError(ctx, 403, "Permission denied");
+      } else if (e.getStatus().getCode() == io.grpc.Status.Code.UNAUTHENTICATED) {
+        setError(ctx, 401, "Authentication required");
+      } else {
+        Logger.error(e, "Error retrieving embedder: {}", e.getMessage());
+        setError(ctx, 500, "Internal server error");
+      }
+    }
   }
 
   /**
@@ -1693,142 +1874,357 @@ public class Main {
    *
    * @param ctx The Javalin context containing the request and response
    */
+  @OpenApi(
+      path = "/v1/embedders",
+      methods = { HttpMethod.GET },
+      summary = "List embedders",
+      description = "Retrieves a list of embedders accessible to the caller, with optional filtering by owner, provider type, and labels.",
+      operationId = "listEmbedders",
+      tags = "Embedders",
+      queryParams = {
+          @io.javalin.openapi.OpenApiParam(
+              name = "owner_id",
+              description = "Filter embedders by owner ID. If not provided, shows embedders based on permissions.",
+              required = false,
+              type = String.class,
+              example = "550e8400-e29b-41d4-a716-446655440000"),
+          @io.javalin.openapi.OpenApiParam(
+              name = "provider_type", 
+              description = "Filter embedders by provider type (OPENAI, VLLM, TEI)",
+              required = false,
+              type = String.class,
+              example = "OPENAI"),
+          @io.javalin.openapi.OpenApiParam(
+              name = "label.*",
+              description = "Filter by label value. Multiple label filters can be specified (e.g., ?label.environment=prod&label.team=nlp)",
+              required = false,
+              type = String.class,
+              example = "?label.environment=prod&label.team=nlp")
+      },
+      responses = {
+          @OpenApiResponse(
+              status = "200",
+              description = "Successfully retrieved embedders",
+              content = @OpenApiContent(from = com.goodmem.rest.dto.ListEmbeddersResponse.class)),
+          @OpenApiResponse(
+              status = "400",
+              description = "Invalid request - invalid filter parameters"),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to list embedders")
+      })
   private void handleListEmbedders(Context ctx) {
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST ListEmbedders request with API key: {}", apiKey);
 
+    // Extract query parameters and create request DTO
+    Map<String, String> labelSelectors = new HashMap<>();
+    ctx.queryParamMap().forEach((key, values) -> {
+      if (key.startsWith("label.") && !values.isEmpty()) {
+        String labelKey = key.substring("label.".length());
+        String value = values.getFirst();
+        if (value != null) {
+          labelSelectors.put(labelKey, value);
+        }
+      }
+    });
+    
+    // Create the DTO from query parameters
+    com.goodmem.rest.dto.ProviderType providerType = null;
+    if (ctx.queryParam("provider_type") != null) {
+      providerType = com.goodmem.rest.dto.ProviderType.fromString(ctx.queryParam("provider_type"));
+    }
+    
+    com.goodmem.rest.dto.ListEmbeddersRequest requestDto = new com.goodmem.rest.dto.ListEmbeddersRequest(
+        ctx.queryParam("owner_id"),
+        providerType,
+        labelSelectors.isEmpty() ? null : labelSelectors
+    );
+    
+    // Build the gRPC request 
     ListEmbeddersRequest.Builder requestBuilder = ListEmbeddersRequest.newBuilder();
-
-    // Handle owner_id filter if provided
-    if (ctx.queryParam("owner_id") != null) {
-      StatusOr<ByteString> ownerIdOr = convertHexToUuidBytes(ctx.queryParam("owner_id"));
+    
+    // Add owner_id if provided
+    if (requestDto.ownerId() != null) {
+      StatusOr<ByteString> ownerIdOr = convertHexToUuidBytes(requestDto.ownerId());
       if (ownerIdOr.isOk()) {
         requestBuilder.setOwnerId(ownerIdOr.getValue());
+      } else {
+        Logger.warn("Invalid owner ID format: {}", requestDto.ownerId());
+        setError(ctx, 400, "Invalid owner ID format");
+        return;
       }
     }
-
-    // Handle provider_type filter if provided
-    if (ctx.queryParam("provider_type") != null) {
-      String providerTypeStr = ctx.queryParam("provider_type");
-      goodmem.v1.EmbedderOuterClass.ProviderType providerType =
-          EnumConverters.providerTypeFromString(providerTypeStr);
-      if (providerType != goodmem.v1.EmbedderOuterClass.ProviderType.PROVIDER_TYPE_UNSPECIFIED) {
-        requestBuilder.setProviderType(providerType);
+    
+    // Add provider_type if provided
+    if (requestDto.providerType() != null) {
+      requestBuilder.setProviderType(requestDto.providerType().toProtoProviderType());
+    }
+    
+    // Add label selectors if provided
+    if (requestDto.labelSelectors() != null && !requestDto.labelSelectors().isEmpty()) {
+      requestDto.labelSelectors().forEach(requestBuilder::putLabelSelectors);
+    }
+    
+    try {
+      // Call the gRPC service
+      ListEmbeddersResponse response = embedderService.listEmbedders(requestBuilder.build());
+      
+      // Convert the embedders to DTOs
+      List<com.goodmem.rest.dto.EmbedderResponse> embedderDtos = response.getEmbeddersList().stream()
+          .map(embedder -> {
+            Map<String, Object> embedderMap = RestMapper.toJsonMap(embedder);
+            
+            List<com.goodmem.rest.dto.Modality> modalityList = null;
+            if (embedderMap.containsKey("supported_modalities") && embedderMap.get("supported_modalities") instanceof List) {
+              @SuppressWarnings("unchecked")
+              List<String> modalityStrings = (List<String>) embedderMap.get("supported_modalities");
+              modalityList = modalityStrings.stream()
+                  .map(com.goodmem.rest.dto.Modality::fromString)
+                  .filter(modality -> modality != null)
+                  .toList();
+            }
+            
+            return new com.goodmem.rest.dto.EmbedderResponse(
+                (String) embedderMap.get("embedder_id"),
+                (String) embedderMap.get("display_name"),
+                (String) embedderMap.get("description"),
+                com.goodmem.rest.dto.ProviderType.fromString((String) embedderMap.get("provider_type")),
+                (String) embedderMap.get("endpoint_url"),
+                (String) embedderMap.get("api_path"),
+                (String) embedderMap.get("model_identifier"),
+                embedderMap.get("dimensionality") instanceof Number ? ((Number) embedderMap.get("dimensionality")).intValue() : null,
+                embedderMap.get("max_sequence_length") instanceof Number ? ((Number) embedderMap.get("max_sequence_length")).intValue() : null,
+                modalityList,
+                (Map<String, String>) embedderMap.get("labels"),
+                (String) embedderMap.get("version"),
+                (String) embedderMap.get("monitoring_endpoint"),
+                (String) embedderMap.get("owner_id"),
+                (Long) embedderMap.get("created_at"),
+                (Long) embedderMap.get("updated_at"),
+                (String) embedderMap.get("created_by_id"),
+                (String) embedderMap.get("updated_by_id")
+            );
+          })
+          .toList();
+      
+      // Create and return the response DTO
+      com.goodmem.rest.dto.ListEmbeddersResponse responseDto = new com.goodmem.rest.dto.ListEmbeddersResponse(embedderDtos);
+      ctx.json(responseDto);
+    } catch (io.grpc.StatusRuntimeException e) {
+      if (e.getStatus().getCode() == io.grpc.Status.Code.PERMISSION_DENIED) {
+        setError(ctx, 403, "Permission denied");
+      } else if (e.getStatus().getCode() == io.grpc.Status.Code.UNAUTHENTICATED) {
+        setError(ctx, 401, "Authentication required");
+      } else if (e.getStatus().getCode() == io.grpc.Status.Code.INVALID_ARGUMENT) {
+        setError(ctx, 400, e.getStatus().getDescription());
+      } else {
+        Logger.error(e, "Error listing embedders: {}", e.getMessage());
+        setError(ctx, 500, "Internal server error");
       }
     }
-
-    // Handle label selectors from query parameters
-    ctx.queryParamMap()
-        .forEach(
-            (key, values) -> {
-              if (key.startsWith("label.") && !values.isEmpty()) {
-                String labelKey = key.substring("label.".length());
-                requestBuilder.putLabelSelectors(labelKey, values.getFirst());
-              }
-            });
-
-    ListEmbeddersResponse response = embedderService.listEmbedders(requestBuilder.build());
-    ctx.json(
-        Map.of(
-            "embedders", response.getEmbeddersList().stream().map(RestMapper::toJsonMap).toList()));
   }
 
   /**
    * Handles a REST request to update an Embedder by ID. Converts the hex UUID to binary format,
-   * builds the update request from JSON, and calls the gRPC service.
+   * builds the update request from the DTO, and calls the gRPC service.
    *
    * @param ctx The Javalin context containing the request and response
    */
+  @OpenApi(
+      path = "/v1/embedders/{id}",
+      methods = { HttpMethod.PUT },
+      summary = "Update an embedder",
+      description = "Updates an existing embedder with new values for the specified fields. Fields not included in the request remain unchanged.",
+      operationId = "updateEmbedder",
+      tags = "Embedders",
+      pathParams = {
+          @io.javalin.openapi.OpenApiParam(
+              name = "id",
+              description = "The unique identifier of the embedder to update",
+              required = true,
+              type = String.class,
+              example = "550e8400-e29b-41d4-a716-446655440000")
+      },
+      requestBody =
+          @OpenApiRequestBody(
+              description = "Embedder update details",
+              required = true,
+              content =
+                  @OpenApiContent(
+                      from = com.goodmem.rest.dto.UpdateEmbedderRequest.class,
+                      example =
+                          """
+              {
+                "displayName": "Updated OpenAI Embedding Model",
+                "description": "Updated description for OpenAI embedding model",
+                "endpointUrl": "https://api.openai.com",
+                "credentials": "sk-updatedcredentials",
+                "replaceLabels": {
+                  "environment": "staging",
+                  "team": "nlp-research"
+                }
+              }
+              """)),
+      responses = {
+          @OpenApiResponse(
+              status = "200",
+              description = "Successfully updated embedder",
+              content = @OpenApiContent(from = com.goodmem.rest.dto.EmbedderResponse.class)),
+          @OpenApiResponse(
+              status = "400",
+              description = "Invalid request - ID format or update parameters invalid"),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to update this embedder"),
+          @OpenApiResponse(
+              status = "404",
+              description = "Not found - embedder with the specified ID does not exist")
+      })
   private void handleUpdateEmbedder(Context ctx) {
     String embedderIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST UpdateEmbedder request for ID: {} with API key: {}", embedderIdHex, apiKey);
 
+    // Parse the request body as our DTO
+    com.goodmem.rest.dto.UpdateEmbedderRequest requestDto = ctx.bodyAsClass(com.goodmem.rest.dto.UpdateEmbedderRequest.class);
+    
+    // Validate label strategy (only one of replaceLabels or mergeLabels can be set)
+    try {
+      requestDto.validateLabelStrategy();
+    } catch (IllegalArgumentException e) {
+      setError(ctx, 400, e.getMessage());
+      return;
+    }
+    
+    // Validate and convert the embedder ID
     StatusOr<ByteString> embedderIdOr = convertHexToUuidBytes(embedderIdHex);
     if (embedderIdOr.isNotOk()) {
       setError(ctx, 400, "Invalid embedder ID format");
       return;
     }
-
-    UpdateEmbedderRequest.Builder requestBuilder =
-        UpdateEmbedderRequest.newBuilder().setEmbedderId(embedderIdOr.getValue());
-
-    Map<String, Object> json = ctx.bodyAsClass(Map.class);
-
-    if (json.containsKey("display_name")) {
-      requestBuilder.setDisplayName((String) json.get("display_name"));
+    
+    // Build the gRPC request
+    UpdateEmbedderRequest.Builder requestBuilder = UpdateEmbedderRequest.newBuilder()
+        .setEmbedderId(embedderIdOr.getValue());
+        
+    // Set optional fields if provided in the DTO
+    if (requestDto.displayName() != null) {
+      requestBuilder.setDisplayName(requestDto.displayName());
     }
-
-    if (json.containsKey("description")) {
-      requestBuilder.setDescription((String) json.get("description"));
+    
+    if (requestDto.description() != null) {
+      requestBuilder.setDescription(requestDto.description());
     }
-
-    if (json.containsKey("endpoint_url")) {
-      requestBuilder.setEndpointUrl((String) json.get("endpoint_url"));
+    
+    if (requestDto.endpointUrl() != null) {
+      requestBuilder.setEndpointUrl(requestDto.endpointUrl());
     }
-
-    if (json.containsKey("api_path")) {
-      requestBuilder.setApiPath((String) json.get("api_path"));
+    
+    if (requestDto.apiPath() != null) {
+      requestBuilder.setApiPath(requestDto.apiPath());
     }
-
-    if (json.containsKey("model_identifier")) {
-      requestBuilder.setModelIdentifier((String) json.get("model_identifier"));
+    
+    if (requestDto.modelIdentifier() != null) {
+      requestBuilder.setModelIdentifier(requestDto.modelIdentifier());
     }
-
-    if (json.containsKey("dimensionality")) {
-      if (json.get("dimensionality") instanceof Number) {
-        requestBuilder.setDimensionality(((Number) json.get("dimensionality")).intValue());
+    
+    if (requestDto.dimensionality() != null) {
+      requestBuilder.setDimensionality(requestDto.dimensionality());
+    }
+    
+    if (requestDto.maxSequenceLength() != null) {
+      requestBuilder.setMaxSequenceLength(requestDto.maxSequenceLength());
+    }
+    
+    if (requestDto.supportedModalities() != null && !requestDto.supportedModalities().isEmpty()) {
+      for (com.goodmem.rest.dto.Modality modality : requestDto.supportedModalities()) {
+        requestBuilder.addSupportedModalities(modality.toProtoModality());
       }
     }
-
-    if (json.containsKey("max_sequence_length")) {
-      if (json.get("max_sequence_length") instanceof Number) {
-        requestBuilder.setMaxSequenceLength(((Number) json.get("max_sequence_length")).intValue());
-      }
+    
+    if (requestDto.credentials() != null) {
+      requestBuilder.setCredentials(requestDto.credentials());
     }
-
-    if (json.containsKey("supported_modalities")
-        && json.get("supported_modalities") instanceof Iterable) {
-      @SuppressWarnings("unchecked")
-      Iterable<String> modalityStrings = (Iterable<String>) json.get("supported_modalities");
-      for (String modalityStr : modalityStrings) {
-        goodmem.v1.EmbedderOuterClass.Modality modality =
-            EnumConverters.modalityFromString(modalityStr);
-        if (modality != goodmem.v1.EmbedderOuterClass.Modality.MODALITY_UNSPECIFIED) {
-          requestBuilder.addSupportedModalities(modality);
-        }
-      }
+    
+    if (requestDto.version() != null) {
+      requestBuilder.setVersion(requestDto.version());
     }
-
-    if (json.containsKey("credentials")) {
-      requestBuilder.setCredentials((String) json.get("credentials"));
+    
+    if (requestDto.monitoringEndpoint() != null) {
+      requestBuilder.setMonitoringEndpoint(requestDto.monitoringEndpoint());
     }
-
-    if (json.containsKey("version")) {
-      requestBuilder.setVersion((String) json.get("version"));
-    }
-
-    if (json.containsKey("monitoring_endpoint")) {
-      requestBuilder.setMonitoringEndpoint((String) json.get("monitoring_endpoint"));
-    }
-
-    // Handle label update strategy (replace_labels or merge_labels)
-    if (json.containsKey("replace_labels") && json.get("replace_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> labels = (Map<String, String>) json.get("replace_labels");
+    
+    // Handle label update strategy
+    if (requestDto.replaceLabels() != null) {
       StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(labels);
+      labelsBuilder.putAllLabels(requestDto.replaceLabels());
       requestBuilder.setReplaceLabels(labelsBuilder.build());
-    } else if (json.containsKey("merge_labels") && json.get("merge_labels") instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, String> labels = (Map<String, String>) json.get("merge_labels");
+    } else if (requestDto.mergeLabels() != null) {
       StringMap.Builder labelsBuilder = StringMap.newBuilder();
-      labelsBuilder.putAllLabels(labels);
+      labelsBuilder.putAllLabels(requestDto.mergeLabels());
       requestBuilder.setMergeLabels(labelsBuilder.build());
     }
-
-    Embedder response = embedderService.updateEmbedder(requestBuilder.build());
-    ctx.json(RestMapper.toJsonMap(response));
+    
+    try {
+      // Call the gRPC service
+      Embedder response = embedderService.updateEmbedder(requestBuilder.build());
+      
+      // Convert the response to our DTO
+      Map<String, Object> responseMap = RestMapper.toJsonMap(response);
+      
+      List<com.goodmem.rest.dto.Modality> modalityList = null;
+      if (responseMap.containsKey("supported_modalities") && responseMap.get("supported_modalities") instanceof List) {
+        @SuppressWarnings("unchecked")
+        List<String> modalityStrings = (List<String>) responseMap.get("supported_modalities");
+        modalityList = modalityStrings.stream()
+            .map(com.goodmem.rest.dto.Modality::fromString)
+            .filter(modality -> modality != null)
+            .toList();
+      }
+      
+      com.goodmem.rest.dto.EmbedderResponse responseDto = new com.goodmem.rest.dto.EmbedderResponse(
+          (String) responseMap.get("embedder_id"),
+          (String) responseMap.get("display_name"),
+          (String) responseMap.get("description"),
+          com.goodmem.rest.dto.ProviderType.fromString((String) responseMap.get("provider_type")),
+          (String) responseMap.get("endpoint_url"),
+          (String) responseMap.get("api_path"),
+          (String) responseMap.get("model_identifier"),
+          responseMap.get("dimensionality") instanceof Number ? ((Number) responseMap.get("dimensionality")).intValue() : null,
+          responseMap.get("max_sequence_length") instanceof Number ? ((Number) responseMap.get("max_sequence_length")).intValue() : null,
+          modalityList,
+          (Map<String, String>) responseMap.get("labels"),
+          (String) responseMap.get("version"),
+          (String) responseMap.get("monitoring_endpoint"),
+          (String) responseMap.get("owner_id"),
+          (Long) responseMap.get("created_at"),
+          (Long) responseMap.get("updated_at"),
+          (String) responseMap.get("created_by_id"),
+          (String) responseMap.get("updated_by_id")
+      );
+      
+      ctx.json(responseDto);
+    } catch (io.grpc.StatusRuntimeException e) {
+      if (e.getStatus().getCode() == io.grpc.Status.Code.NOT_FOUND) {
+        setError(ctx, 404, "Embedder not found");
+      } else if (e.getStatus().getCode() == io.grpc.Status.Code.PERMISSION_DENIED) {
+        setError(ctx, 403, "Permission denied");
+      } else if (e.getStatus().getCode() == io.grpc.Status.Code.UNAUTHENTICATED) {
+        setError(ctx, 401, "Authentication required");
+      } else if (e.getStatus().getCode() == io.grpc.Status.Code.INVALID_ARGUMENT) {
+        setError(ctx, 400, e.getStatus().getDescription());
+      } else {
+        Logger.error(e, "Error updating embedder: {}", e.getMessage());
+        setError(ctx, 500, "Internal server error");
+      }
+    }
   }
 
   /**
@@ -1837,20 +2233,76 @@ public class Main {
    *
    * @param ctx The Javalin context containing the request and response
    */
+  @OpenApi(
+      path = "/v1/embedders/{id}",
+      methods = { HttpMethod.DELETE },
+      summary = "Delete an embedder",
+      description = "Deletes an embedder configuration. This operation cannot be undone.",
+      operationId = "deleteEmbedder",
+      tags = "Embedders",
+      pathParams = {
+          @io.javalin.openapi.OpenApiParam(
+              name = "id",
+              description = "The unique identifier of the embedder to delete",
+              required = true,
+              type = String.class,
+              example = "550e8400-e29b-41d4-a716-446655440000")
+      },
+      responses = {
+          @OpenApiResponse(
+              status = "204",
+              description = "Embedder successfully deleted"),
+          @OpenApiResponse(
+              status = "400",
+              description = "Invalid request - embedder ID in invalid format"),
+          @OpenApiResponse(
+              status = "401",
+              description = "Unauthorized - invalid or missing API key"),
+          @OpenApiResponse(
+              status = "403",
+              description = "Forbidden - insufficient permissions to delete this embedder"),
+          @OpenApiResponse(
+              status = "404",
+              description = "Not found - embedder with the specified ID does not exist")
+      })
   private void handleDeleteEmbedder(Context ctx) {
     String embedderIdHex = ctx.pathParam("id");
     String apiKey = ctx.header("x-api-key");
     Logger.info("REST DeleteEmbedder request for ID: {} with API key: {}", embedderIdHex, apiKey);
 
-    StatusOr<ByteString> embedderIdOr = convertHexToUuidBytes(embedderIdHex);
+    // Create the DTO from the path parameter
+    com.goodmem.rest.dto.DeleteEmbedderRequest requestDto = new com.goodmem.rest.dto.DeleteEmbedderRequest(embedderIdHex);
+    
+    // Validate and convert the embedder ID
+    StatusOr<ByteString> embedderIdOr = convertHexToUuidBytes(requestDto.embedderId());
     if (embedderIdOr.isNotOk()) {
       setError(ctx, 400, "Invalid embedder ID format");
       return;
     }
-
-    embedderService.deleteEmbedder(
-        DeleteEmbedderRequest.newBuilder().setEmbedderId(embedderIdOr.getValue()).build());
-    ctx.status(204);
+    
+    try {
+      // Create and execute the gRPC request
+      DeleteEmbedderRequest request = DeleteEmbedderRequest.newBuilder()
+          .setEmbedderId(embedderIdOr.getValue())
+          .build();
+      
+      // Call the gRPC service
+      embedderService.deleteEmbedder(request);
+      
+      // Return 204 No Content on successful deletion
+      ctx.status(204);
+    } catch (io.grpc.StatusRuntimeException e) {
+      if (e.getStatus().getCode() == io.grpc.Status.Code.NOT_FOUND) {
+        setError(ctx, 404, "Embedder not found");
+      } else if (e.getStatus().getCode() == io.grpc.Status.Code.PERMISSION_DENIED) {
+        setError(ctx, 403, "Permission denied");
+      } else if (e.getStatus().getCode() == io.grpc.Status.Code.UNAUTHENTICATED) {
+        setError(ctx, 401, "Authentication required");
+      } else {
+        Logger.error(e, "Error deleting embedder: {}", e.getMessage());
+        setError(ctx, 500, "Internal server error");
+      }
+    }
   }
 
   // Utility methods for converting protocol buffer messages to Maps for JSON serialization
