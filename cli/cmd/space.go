@@ -35,7 +35,6 @@ var (
 
 	// Variables for updateSpaceCmd
 	labelUpdateStrategy string
-	labelSelectors      map[string]string
 )
 
 // spaceCmd represents the space command
